@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
-import numpy as np 
-from utils import * 
+import numpy as np
+from utils import *
 
 
 ################################## set device ##################################
@@ -14,13 +14,13 @@ print("=========================================================================
 # set device to cpu or cuda
 device = torch.device('cpu')
 
-if(torch.cuda.is_available()): 
-    device = torch.device('cuda:0') 
-    torch.cuda.empty_cache()
-    print("Device set to : " + str(torch.cuda.get_device_name(device)))
-else:
-    print("Device set to : cpu")
-    
+# if(torch.cuda.is_available()):
+#     device = torch.device('cuda:0')
+#     torch.cuda.empty_cache()
+#     print("Device set to : " + str(torch.cuda.get_device_name(device)))
+# else:
+#     print("Device set to : cpu")
+
 print("============================================================================================")
 
 
@@ -28,14 +28,14 @@ print("=========================================================================
 
 ################################## PPO Policy ##################################
 def geometric_index(size, bs):
-    """ 
+    """
     Return indices such that the previous states are weighted
     heavier than the next
     """
     while True:
         idxs = np.random.geometric(1- 0.99, bs)
         if (idxs<=size-1).sum() == bs:
-            return idxs 
+            return idxs
 
 class RolloutBuffer:
     def __init__(self):
@@ -44,7 +44,7 @@ class RolloutBuffer:
         self.logprobs = []
         self.rewards = []
         self.is_terminals = []
-    
+
 
     def clear(self):
         del self.actions[:]
@@ -98,7 +98,7 @@ class ActorCritic(nn.Module):
                             nn.Softmax(dim=-1)
                         )
 
-        
+
         # critic
         self.critic = nn.Sequential(
                         nn.Linear(state_dim, 64),
@@ -107,7 +107,7 @@ class ActorCritic(nn.Module):
                         nn.Tanh(),
                         nn.Linear(64, 1)
                     )
-        
+
     def set_action_std(self, new_action_std):
 
         if self.has_continuous_action_space:
@@ -125,13 +125,13 @@ class ActorCritic(nn.Module):
         dist = MultivariateNormal(action_mean, cov_mat)
         mode = action_mean
 
-        return dist, mode 
+        return dist, mode
 
     def get_log_prob(self, states, actions):
 
         dist, _ = self.get_dist_and_mode(states)
         log_probs = dist.log_prob(actions)
-        return log_probs 
+        return log_probs
 
     def forward(self, states):
         if not isinstance(states, torch.Tensor):
@@ -140,7 +140,7 @@ class ActorCritic(nn.Module):
         samples = dist.rsample()
         log_probs = dist.log_prob(samples)
 
-        return mode, samples, log_probs            
+        return mode, samples, log_probs
 
     def act(self, state):
 
@@ -154,19 +154,19 @@ class ActorCritic(nn.Module):
 
         action = dist.sample()
         action_logprob = dist.log_prob(action)
-        
+
         return action.detach(), action_logprob.detach()
-    
+
 
     def evaluate(self, state, action):
 
         if self.has_continuous_action_space:
             action_mean = self.actor(state)
-            
+
             action_var = self.action_var.expand_as(action_mean)
             cov_mat = torch.diag_embed(action_var).to(device)
             dist = MultivariateNormal(action_mean, cov_mat)
-            
+
             # For Single Action Environments.
             if self.action_dim == 1:
                 action = action.reshape(-1, self.action_dim)
@@ -177,31 +177,31 @@ class ActorCritic(nn.Module):
         action_logprobs = dist.log_prob(action)
         dist_entropy = dist.entropy()
         state_values = self.critic(state)
-        
+
         return action_logprobs, state_values, dist_entropy
 
 
 class PPO:
-    def __init__(self, logger, 
-        state_dim = 11, 
-        action_dim = 3, 
+    def __init__(self, logger,
+        state_dim = 11,
+        action_dim = 3,
         lr_actor = 3e-4,
-        lr_critic = 1e-3, 
+        lr_critic = 1e-3,
         gamma = 0.99,
-        K_epochs = 5, 
-        eps_clip = 0.2, 
-        has_continuous_action_space  = True, 
+        K_epochs = 5,
+        eps_clip = 0.2,
+        has_continuous_action_space  = True,
         action_std_init=0.6,
         parallel = 1000,
         horizon = 10,
         single = False,
-        bc_batch_size = 256, 
+        bc_batch_size = 256,
         geometric = False,
         bc_loss = "logprob",
         bc_ppo_train_step = 1
         ):
 
-        self.logger = logger 
+        self.logger = logger
         self.has_continuous_action_space = has_continuous_action_space
 
         if has_continuous_action_space:
@@ -210,7 +210,7 @@ class PPO:
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.K_epochs = K_epochs
-        
+
         if parallel == 1:
             self.buffer = RolloutBuffer()
         else:
@@ -224,23 +224,23 @@ class PPO:
 
         self.policy_old = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
-        
+
         self.MseLoss = nn.MSELoss()
 
-        self.parallel = True if parallel > 1 else False 
-        self.horizon = horizon 
-        self.state_dim, self.action_dim = state_dim, action_dim 
+        self.parallel = True if parallel > 1 else False
+        self.horizon = horizon
+        self.state_dim, self.action_dim = state_dim, action_dim
         self.bc_batch_size = bc_batch_size
         self.geometric = geometric
-        self.bc_loss = bc_loss 
+        self.bc_loss = bc_loss
         self.bc_ppo_train_step = bc_ppo_train_step
     def set_action_std(self, new_action_std):
-        
+
         if self.has_continuous_action_space:
             self.action_std = new_action_std
             self.policy.set_action_std(new_action_std)
             self.policy_old.set_action_std(new_action_std)
-        
+
 
     def decay_action_std(self, action_std_decay_rate, min_action_std):
 
@@ -297,7 +297,7 @@ class PPO:
             old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
             old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
 
-        else: 
+        else:
             rewards = []
             discounted_reward = 0
             buffer_rewards, buffer_is_terminals = self.buffer.rewards.reshape(-1).tolist(),self.buffer.is_terminals.reshape(-1).tolist()
@@ -320,7 +320,7 @@ class PPO:
 
         # convert list to tensor
 
-        
+
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
@@ -328,12 +328,12 @@ class PPO:
             logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)
-            
+
             # Finding the ratio (pi_theta / pi_theta__old)
             ratios = torch.exp(logprobs - old_logprobs.detach())
 
             # Finding Surrogate Loss
-            advantages = rewards - state_values.detach()   
+            advantages = rewards - state_values.detach()
 
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
@@ -363,7 +363,7 @@ class PPO:
         # clear buffer
         if clear_buffer:
             self.buffer.clear()
- 
+
 
     def bc_step(self, state_batch,action_batch):
         state_batch, action_batch = torch.FloatTensor(state_batch), torch.FloatTensor(action_batch)
@@ -375,7 +375,7 @@ class PPO:
         self.optimizer.step()
 
 
-        return loss.item() 
+        return loss.item()
 
     def grad_norm(self, model):
         with torch.no_grad():
@@ -383,8 +383,8 @@ class PPO:
             for p in model.parameters():
                 param_norm = p.grad.data.norm(2)
                 total_norm += param_norm.item() ** 2
-            total_norm = total_norm ** (1. / 2)     
-        return total_norm 
+            total_norm = total_norm ** (1. / 2)
+        return total_norm
 
     def train_bc(self,state,action, train_step = 1500,
      eva = False, geometric = None, progress = False ):
@@ -395,8 +395,8 @@ class PPO:
 
         losses, scores = [], []
         state, action = torch.FloatTensor(state), torch.FloatTensor(action)
-        from tqdm import trange  
-        bar = trange if progress else range 
+        from tqdm import trange
+        bar = trange if progress else range
         for i in bar(train_step):
             if geometric:
                 idxs = geometric_index(state.shape[0],batch_size)
@@ -415,7 +415,7 @@ class PPO:
                 print(score)
                 scores.append(score)
 
-            self.optimizer.zero_grad() 
+            self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
 
@@ -430,7 +430,7 @@ class PPO:
      eva = False, batch_size = 256, geometric = False):
         losses, scores = [], []
         state, action = torch.FloatTensor(state), torch.FloatTensor(action)
-        from tqdm import trange  
+        from tqdm import trange
         for i in range(train_step):
             if geometric:
                 idxs = geometric_index(state.shape[0],batch_size)
@@ -445,10 +445,10 @@ class PPO:
                 print(score)
                 scores.append(score)
 
-            self.optimizer.zero_grad() 
+            self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-            clear_buffer = True if i == train_step - 1 else False 
+            clear_buffer = True if i == train_step - 1 else False
             self.update(clear_buffer = clear_buffer)
 
             losses.append(loss.item())
@@ -460,18 +460,18 @@ class PPO:
 
     def save(self, checkpoint_path):
         torch.save(self.policy_old.state_dict(), checkpoint_path)
-   
+
 
     def load(self, checkpoint_path):
         self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
         self.policy.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
-        
+
 def algo1(agent, discrim, env, e_states, e_actions, update_bc = True, s_a = False):
 
     for i in range(1):
         rollout_real_ppo(agent, discrim, env, agent.logger, batch_size = 20000, s_a = s_a)
         if s_a:
-            discrim.train_discrim(e_states,e_actions, torch.stack(agent.buffer.states, dim=0), 
+            discrim.train_discrim(e_states,e_actions, torch.stack(agent.buffer.states, dim=0),
                              torch.stack(agent.buffer.actions, dim=0))
         else:
             discrim.train_discrim(e_states, torch.stack(agent.buffer.states, dim=0))
@@ -483,10 +483,10 @@ def algo1(agent, discrim, env, e_states, e_actions, update_bc = True, s_a = Fals
             agent.update()
         print(i)
         agent.logger.say()
-        print() 
+        print()
 
 def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False):
-    
+
     state = env.reset()
     rewards, fake_rewards = 0,0
     eps_rewards, eps_fake_reward = [], []
@@ -495,9 +495,9 @@ def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False
 
         next_state, reward, done, _ = env.step(action.flatten())
         if s_a:
-            fake_reward = discrim(state.reshape(1,-1),action.reshape(1,-1)).detach().item() 
+            fake_reward = discrim(state.reshape(1,-1),action.reshape(1,-1)).detach().item()
         else:
-            fake_reward = discrim(state.reshape(1,-1)).detach().item() 
+            fake_reward = discrim(state.reshape(1,-1)).detach().item()
 
         #agent.buffer.rewards.append(reward)
         agent.buffer.rewards.append(fake_reward)
@@ -509,8 +509,8 @@ def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False
             eps_fake_reward.append(fake_rewards)
             rewards, fake_rewards = 0, 0
             state = env.reset()
-            continue 
-            
+            continue
+
         state = next_state
 
     logger.log('mean real reward', np.asarray(eps_rewards).mean())
@@ -521,13 +521,17 @@ def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False
 
 
 
-def algo2(agent, discrim,model, env, states, e_states, e_actions, logger, update_bc = True, s_a = False):
+def algo2(agent, discrim,model, env, states, e_states, e_actions, logger,
+    update_bc = True,
+    s_a = False,
+    start_state = 'bad'):
 
     for i in range(2000):
-        rollout_single_ppo(agent, model, discrim, e_states,states, logger, s_a = s_a)
+        rollout_single_ppo(agent, model, discrim, e_states,states, logger,env,
+        s_a = s_a, start_state = start_state)
 
         if s_a:
-            discrim.train_discrim(e_states,e_actions, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy(), 
+            discrim.train_discrim(e_states,e_actions, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy(),
                              torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])).numpy())
         else:
             discrim.train_discrim(e_states, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy())
@@ -542,9 +546,9 @@ def algo2(agent, discrim,model, env, states, e_states, e_actions, logger, update
         rew, _ = evaluate(agent.policy, env)
         logger.log('real reward', rew)
         agent.logger.say()
-        print() 
-    
-def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,
+        print()
+
+def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
                        s_a = True, start_state = 'bad'):
     total_rewards = []
     parallel, rollout_length = agent.buffer.states.shape[0], agent.buffer.states.shape[1]
@@ -561,8 +565,11 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,
     #         state = states[np.random.geometric(0.01, size = parallel)]
     if start_state == 'bad':
         state = bad_states[np.random.permutation(bad_states.shape[0])[:parallel]]
+    elif start_state == 'good':
+        state = states[geometric_index(states.shape[0],parallel )]
+    elif start_state == 'random':
+        state = np.asarray([env.reset() for _ in range(parallel)])
 
-    
     for horizon in range(rollout_length):
 
         agent_action = agent.select_action(state, horizon)
@@ -572,7 +579,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,
         else:
             reward = discrim(state).detach()
 
-        model_loss = model.validate(state, agent_action, 
+        model_loss = model.validate(state, agent_action,
                                     model_n_obs, verbose = False)
 
         terminals = [False if horizon < rollout_length-1 else True for _ in range(len(reward))]
@@ -588,10 +595,8 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,
         logger.log('state mean',state.mean() )
         logger.log('state std',state.std())
         total_rewards.append(np.array(reward).reshape(-1))
-        
+
         state = model_n_obs
 
     print('Discrim rewards', np.stack(total_rewards).mean(1), np.stack(total_rewards).sum(0).mean())
     logger.log('avg total rewards', np.stack(total_rewards).sum(0).mean())
-
-       

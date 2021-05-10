@@ -1,6 +1,6 @@
-import pickle 
-import numpy as np 
-import torch 
+import pickle
+import numpy as np
+import torch
 
 def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None):
 
@@ -10,8 +10,8 @@ def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None):
 	for _ in range(num_episodes):
 		if normalizer:
 			state = normalizer.normalize(env.reset())
-		else: 
-			state = env.reset() 
+		else:
+			state = env.reset()
 
 		done = False
 		while not done:
@@ -29,7 +29,7 @@ def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None):
 			if normalizer:
 				state = normalizer.normalize(next_state)
 			else:
-				state = next_state 
+				state = next_state
 
 	return total_returns / num_episodes, total_timesteps / num_episodes
 class Logger:
@@ -43,9 +43,9 @@ class Logger:
             self.dict[key] = [value]
 
     def plot(self, num = None):
-        import matplotlib
-        matplotlib.use("Qt5Agg")
-        import matplotlib.pyplot as plt 
+        # import matplotlib
+        # matplotlib.use("Qt5Agg")
+        import matplotlib.pyplot as plt
         if num is None:
             for k,v in self.dict.items():
                 plt.figure()
@@ -54,9 +54,9 @@ class Logger:
                 #plt.show()
                 plt.savefig('figs/'+k)
         else:
-            import os 
+            import os
             if not os.path.exists('offfigs/'+num+'/'):
-                os.makedirs('offfigs/'+num+'/')        
+                os.makedirs('offfigs/'+num+'/')
             for k,v in self.dict.items():
                 print(k,np.asarray(v).mean())
                 plt.figure()
@@ -78,7 +78,7 @@ class Logger:
     def plot_nb(self):
         import matplotlib
         matplotlib.use("Qt5Agg")
-        import matplotlib.pyplot as plt 
+        import matplotlib.pyplot as plt
         for k,v in self.dict.items():
             print(k, np.asarray(v).mean())
             plt.figure()
@@ -91,19 +91,19 @@ def get_data(env_name ='Hopper-v2'):
     if env_name == 'Hopper-v2':
         buffer = pickle.load(open('hopper.pkl', 'rb'))
 
-    return buffer 
+    return buffer
 
 
 
 
 
 def get_expert(env_name = 'PBHopper', return_next_states = True):
-	import pickle 
+	import pickle
 	if env_name == 'Pendulum-v0':
 		try:
 			trajs = pickle.load(open('data/expert_pendulum.pkl', 'rb'))
 		except:
-			import pickle5 as pickle 
+			import pickle5 as pickle
 			trajs =  pickle.load(open('data/expert_pendulum.pkl', 'rb'))
 		states, actions = [], []
 		for traj in trajs:
@@ -117,7 +117,7 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 		for traj in trajs:
 			traj = np.asarray(traj)
 			states.append(np.stack(traj[:,0]).astype('float'))
-			actions.append(np.stack(traj[:,1]).astype('float'))		
+			actions.append(np.stack(traj[:,1]).astype('float'))
 
 	elif env_name == 'Hopper-v2':
 		trajs = pickle.load(open('data/hopper_expert.pkl', 'rb'))
@@ -128,7 +128,7 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 
 	if return_next_states:
 
-		traj_states, traj_actions = states, actions 
+		traj_states, traj_actions = states, actions
 		states_, actions_, next_states_, next_actions_ = [],[],[], []
 		for states, actions in zip(traj_states, traj_actions):
 			next_states = np.copy(states[1:])
@@ -148,6 +148,3 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 
 
 		return states[:990], actions[:990], next_states[:990], next_actions[:990]
-
-
-		
