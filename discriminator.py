@@ -64,7 +64,7 @@ class SmallD(nn.Module):
         return loss.item() 
 
     
-    def train_discrim(self, e_states, e_actions, l_states, l_actions,num_steps = 10000,  bs = 256):
+    def train_discrim(self, e_states, e_actions, l_states, l_actions,num_steps = 10,  bs = 256):
         
         for _ in range(num_steps):
             idx = np.random.permutation(l_states.shape[0])[:bs]
@@ -74,7 +74,74 @@ class SmallD(nn.Module):
             e_state_batch, e_action_batch = e_states[e_idx], e_actions[e_idx]
 
             loss = self.step(l_state_batch, l_action_batch, e_state_batch, e_action_batch)
-            print(loss)
+
+
+class SmallD_S(nn.Module):
+    def __init__(self, logger, s = 3, lipschitz = 0.1):
+        super().__init__()
+        self.lipschitz = lipschitz
+        self.net = nn.Sequential(nn.Linear(s, 64), 
+            nn.ReLU(),
+            nn.Linear(64,64),
+            nn.ReLU(),
+            nn.Linear(64,1))
+        self.optim = torch.optim.Adam(self.parameters(), lr = 3e-4)
+        self.logger = logger 
+        
+        for p in self.parameters():
+            p.data.clamp_(-self.lipschitz, self.lipschitz)
+    def forward(self,s):
+
+        if not isinstance(s,torch.Tensor):
+            s= torch.FloatTensor(s)
+        #sa = torch.cat([s,a],1)
+        return self.net(s)
+
+    def loss_fn(self, lscore, escore, loss = 'linear'):
+
+        #KL naive 
+        if loss == 'kl':
+            diff = (lscore-escore).mean()
+            with torch.no_grad():
+                weights = softmax(diff)
+            loss = torch.sum(weights* diff)
+
+        elif loss == 'linear':
+            loss = (lscore - escore).mean()
+
+        return loss 
+
+    def step(self, state_batch, e_state_batch):
+        state_batch=  torch.FloatTensor(state_batch)
+        e_state_batch= torch.FloatTensor(e_state_batch)
+
+        lscore = self(state_batch)
+        escore = self(e_state_batch)
+        loss = self.loss_fn(lscore, escore)
+
+        self.optim.zero_grad()
+        loss.backward()
+        self.optim.step()
+        
+        for p in self.parameters():
+            p.data.clamp_(-self.lipschitz, self.lipschitz)
+        self.logger.log('discrim loss', loss.item())
+        self.logger.log('escore', escore.mean().detach().item())
+        self.logger.log('lscore', lscore.mean().detach().item())
+
+        return loss.item() 
+
+    
+    def train_discrim(self, e_states, l_states, num_steps = 10,  bs = 256):
+        
+        for _ in range(num_steps):
+            idx = np.random.permutation(l_states.shape[0])[:bs]
+            e_idx = np.random.permutation(e_states.shape[0])[:bs]
+
+            l_state_batch = l_states[idx]
+            e_state_batch = e_states[e_idx]
+
+            loss = self.step(l_state_batch, e_state_batch)
 
 
 class Discrim(nn.Module):

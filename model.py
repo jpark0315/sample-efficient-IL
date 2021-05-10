@@ -169,7 +169,7 @@ class Ensemble_Model:
         self.batch_size = batch_size
         self.decay_lr = decay_lr
         self._model_inds = None 
-    def train(self, inputs, labels, holdout_ratio = 0.2, max_epochs = 1000,
+    def train(self, inputs, labels, holdout_ratio = 0.05, max_epochs = 1000,
             max_epochs_after_update = 5):
         """
         Trains on entire buffer, until holdout set is improved 
@@ -406,10 +406,10 @@ class Ensemble_Model:
         stds = np.std(means,0).mean(-1)
 
         return log_prob, stds
-    def save(self):
-        if not os.path.exists('sac/models/'):
-            os.makedirs('sac/models/')        
-        path = "sac/models/modelnew_"
+    def save(self, ):
+        if not os.path.exists('data/models/'):
+            os.makedirs('data/models/')        
+        path = "data/models/modelnew_"
         torch.save(self.models.state_dict(), path) 
 
     def load(self, states, actions,next_states, model_inds, paths = None, test = False):
@@ -423,7 +423,7 @@ class Ensemble_Model:
         self.scaler.fit(inputs)
 
         if paths is None:
-            path = "sac/models/modelnew_"
+            path = "data/models/modelnew_"
         self.models.load_state_dict(torch.load(path))
  
         if test:

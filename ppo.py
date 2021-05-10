@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import numpy as np 
+from utils import * 
 
 
 ################################## set device ##################################
@@ -193,7 +194,11 @@ class PPO:
         action_std_init=0.6,
         parallel = 1000,
         horizon = 10,
-        single = False
+        single = False,
+        bc_batch_size = 256, 
+        geometric = False,
+        bc_loss = "logprob",
+        bc_ppo_train_step = 1
         ):
 
         self.logger = logger 
@@ -221,10 +226,14 @@ class PPO:
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
+
         self.parallel = True if parallel > 1 else False 
         self.horizon = horizon 
         self.state_dim, self.action_dim = state_dim, action_dim 
-
+        self.bc_batch_size = bc_batch_size
+        self.geometric = geometric
+        self.bc_loss = bc_loss 
+        self.bc_ppo_train_step = bc_ppo_train_step
     def set_action_std(self, new_action_std):
         
         if self.has_continuous_action_space:
@@ -347,14 +356,15 @@ class PPO:
             self.logger.log('policy ratio', ratios.mean().detach().item())
 
             if e_states is not None:
-                self.train_bc(e_states, e_actions, train_step = 5)
+                self.train_bc(e_states, e_actions, train_step = self.bc_ppo_train_step)
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         # clear buffer
         if clear_buffer:
             self.buffer.clear()
-    
+ 
+
     def bc_step(self, state_batch,action_batch):
         state_batch, action_batch = torch.FloatTensor(state_batch), torch.FloatTensor(action_batch)
         pred = self.policy(state_batch)
@@ -375,19 +385,30 @@ class PPO:
                 total_norm += param_norm.item() ** 2
             total_norm = total_norm ** (1. / 2)     
         return total_norm 
+
     def train_bc(self,state,action, train_step = 1500,
-     eva = False, batch_size = 256, geometric = True):
+     eva = False, geometric = None, progress = False ):
+
+        batch_size = self.bc_batch_size
+        geometric = self.geometric if geometric is None else geometric
+
+
         losses, scores = [], []
         state, action = torch.FloatTensor(state), torch.FloatTensor(action)
         from tqdm import trange  
-        for i in range(train_step):
+        bar = trange if progress else range 
+        for i in bar(train_step):
             if geometric:
                 idxs = geometric_index(state.shape[0],batch_size)
             else:
                 idxs = np.random.permutation(state.shape[0])[:batch_size]
             state_,action_ = state[idxs], action[idxs]
-            mode, samples, log_probs  = self.policy(state_)
-            loss = nn.MSELoss()(samples, action_)
+
+            if self.bc_loss == "MSE":
+                mode, samples, log_probs  = self.policy(state_)
+                loss = nn.MSELoss()(samples, action_)
+            elif self.bc_loss == "logprob":
+                loss = -self.policy.get_log_prob(state_, action_).mean()
 
             if i % 100 == 0 and eva:
                 score, time = evaluate(self, None, env)
@@ -400,7 +421,7 @@ class PPO:
 
             losses.append(loss.item())
             self.logger.log('BC loss', loss.item())
-            self.logger.log('bc grad', self.grad_norm(self.policy))
+            self.logger.log('bc grad', self.grad_norm(self.policy.actor))
 
         self.policy_old.load_state_dict(self.policy.state_dict())
         return losses, scores
@@ -432,7 +453,7 @@ class PPO:
 
             losses.append(loss.item())
             self.logger.log('BC loss', loss.item())
-            self.logger.log('bc grad', self.grad_norm(self.policy))
+            self.logger.log('bc grad', self.grad_norm(self.policy.actor))
 
             self.policy_old.load_state_dict(self.policy.state_dict())
         return losses, scores
@@ -445,5 +466,132 @@ class PPO:
         self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
         self.policy.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
         
+def algo1(agent, discrim, env, e_states, e_actions, update_bc = True, s_a = False):
+
+    for i in range(1):
+        rollout_real_ppo(agent, discrim, env, agent.logger, batch_size = 20000, s_a = s_a)
+        if s_a:
+            discrim.train_discrim(e_states,e_actions, torch.stack(agent.buffer.states, dim=0), 
+                             torch.stack(agent.buffer.actions, dim=0))
+        else:
+            discrim.train_discrim(e_states, torch.stack(agent.buffer.states, dim=0))
+
+
+        if update_bc:
+            agent.update(e_states, e_actions)
+        else:
+            agent.update()
+        print(i)
+        agent.logger.say()
+        print() 
+
+def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False):
+    
+    state = env.reset()
+    rewards, fake_rewards = 0,0
+    eps_rewards, eps_fake_reward = [], []
+    for i in range(batch_size):
+        action = agent.select_action(state)
+
+        next_state, reward, done, _ = env.step(action.flatten())
+        if s_a:
+            fake_reward = discrim(state.reshape(1,-1),action.reshape(1,-1)).detach().item() 
+        else:
+            fake_reward = discrim(state.reshape(1,-1)).detach().item() 
+
+        #agent.buffer.rewards.append(reward)
+        agent.buffer.rewards.append(fake_reward)
+        agent.buffer.is_terminals.append(done)
+        rewards += reward
+        fake_rewards += fake_reward
+        if done:
+            eps_rewards.append(rewards)
+            eps_fake_reward.append(fake_rewards)
+            rewards, fake_rewards = 0, 0
+            state = env.reset()
+            continue 
+            
+        state = next_state
+
+    logger.log('mean real reward', np.asarray(eps_rewards).mean())
+    logger.log('mean fake reward', np.asarray(fake_rewards).mean())
+    print('mean real reward', np.asarray(eps_rewards).mean())
+    print('mean fake reward', np.asarray(fake_rewards).mean())
+
+
+
+
+def algo2(agent, discrim,model, env, states, e_states, e_actions, logger, update_bc = True, s_a = False):
+
+    for i in range(2000):
+        rollout_single_ppo(agent, model, discrim, e_states,states, logger, s_a = s_a)
+
+        if s_a:
+            discrim.train_discrim(e_states,e_actions, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy(), 
+                             torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])).numpy())
+        else:
+            discrim.train_discrim(e_states, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy())
+
+
+        if update_bc:
+            agent.update(e_states, e_actions)
+        else:
+            agent.update()
+
+        print(i)
+        rew, _ = evaluate(agent.policy, env)
+        logger.log('real reward', rew)
+        agent.logger.say()
+        print() 
+    
+def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,
+                       s_a = True, start_state = 'bad'):
+    total_rewards = []
+    parallel, rollout_length = agent.buffer.states.shape[0], agent.buffer.states.shape[1]
+    #state, rollout_rewards = states[np.random.randint(states.shape[0])], []
+    #state, rollout_rewards = states[np.random.geometric(0.01)], []
+    # if np.random.uniform() < 0.1:
+    #     #state = bad_states[np.random.randint(0, len(bad_states), size =parallel)]
+    #     state = bad_states[np.random.geometric(0.01, size = parallel)]
+    # else:
+    #     #state = states[np.random.randint(0, len(states), size =parallel)]
+    #     try:
+    #         state = states[np.random.geometric(0.01, size = parallel)]
+    #     except:
+    #         state = states[np.random.geometric(0.01, size = parallel)]
+    if start_state == 'bad':
+        state = bad_states[np.random.permutation(bad_states.shape[0])[:parallel]]
+
+    
+    for horizon in range(rollout_length):
+
+        agent_action = agent.select_action(state, horizon)
+        model_n_obs, info = model.predict_next_states(state, agent_action, deterministic = True)
+        if s_a:
+            reward = discrim(state,agent_action).detach()
+        else:
+            reward = discrim(state).detach()
+
+        model_loss = model.validate(state, agent_action, 
+                                    model_n_obs, verbose = False)
+
+        terminals = [False if horizon < rollout_length-1 else True for _ in range(len(reward))]
+        #terminals = [True for _ in range(len(reward))]
+        agent.buffer.rewards[:,horizon] = np.array(reward).reshape(-1)
+        agent.buffer.is_terminals[:,horizon] = np.array(terminals).reshape(-1)
+
+
+        logger.log('model logprobs', info['log_prob'].mean())
+        logger.log('model loss', np.asarray(model_loss).mean())
+        logger.log('model loss std', np.asarray(model_loss).std())
+        logger.log('rollout {} rew'.format(horizon), (reward.mean().item(), state.mean(), state.std() ))
+        logger.log('state mean',state.mean() )
+        logger.log('state std',state.std())
+        total_rewards.append(np.array(reward).reshape(-1))
+        
+        state = model_n_obs
+
+    print('Discrim rewards', np.stack(total_rewards).mean(1), np.stack(total_rewards).sum(0).mean())
+    logger.log('avg total rewards', np.stack(total_rewards).sum(0).mean())
 
        

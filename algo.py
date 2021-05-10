@@ -1,5 +1,5 @@
 from actor import Actor
-from discriminator import Discrim
+from discriminator import *
 from model import Ensemble_Model
 from utils import *
 from main import Args 
@@ -9,9 +9,28 @@ import torch
 from itertools import product 
 import pickle 
 import gym 
+from ppo import * 
 
 import os
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
+
+"""
+Things to get right:
+	dataloading(geometric, torch, subsample, random, )
+	initialization
+	ppo details(advantage computation, architecture, etc )
+
+
+Realized:
+	Geometric sampling works a LOT better for BC 
+	State only discriminator works a bit better for BC additional ppo
+	logprob seems slightly better than mse on hopper 
+	Model error-rate is in decreasing order, env.reset-> expert -> random state sampling 
+		-which means it's the policy is indeed causing the model's uncertainty in the horizon 
+		-so one might think that I can somehow fix that 
+
+	I think generally state only is better? and 
+"""
 
 class Algorithm:
 	"""
@@ -25,21 +44,29 @@ class Algorithm:
 		self.env = env 
 		self.logger = logger
 
-		self.obs, self.acts, self.n_obs, self.n_acts = get_expert(env_name='PBHopper')
+		#self.obs, self.acts, self.n_obs, self.n_acts = get_expert(env_name='Hopper-v2')
 
-		self.normalizer = Normalizer(self.obs, self.n_obs)
-		self.obs, self.n_obs = self.normalizer.normalize(self.obs), self.normalizer.normalize(self.n_obs)
+		#self.normalizer = Normalizer(self.obs, self.n_obs)
+		#self.obs, self.n_obs = self.normalizer.normalize(self.obs), self.normalizer.normalize(self.n_obs)
 
 		self.model = Ensemble_Model(state_size = args.state_dim, 
 		        action_size = args.act_dim, logger = logger)
 
-	def train_model(self):
+	def train_model(self, buffer = None, include_expert = True, env_name = "Hopper-v2"):
+		if buffer is None:
+			buffer =  get_data(env_name = env_name)
 
-		states, actions, next_states, next_actions = get_expert(env_name='Hopper-v2')
-		delta_state = next_states - states 
-		inputs = np.concatenate((states, actions), axis = -1)
-		labels = delta_state 
-		print('Num total data', len(inputs))
+		if include_expert:
+			e_states, e_actions, e_next_states, e_next_actions = get_expert(env_name=env_name)
+
+			states, actions, _,next_states,_ = buffer.sample(len(buffer))
+			states, actions = np.concatenate([states, e_states], 0), np.concatenate([actions, e_actions], 0)
+			next_states = np.concatenate([next_states, e_next_states], 0)
+
+			delta_state = next_states - states 
+			inputs = np.concatenate((states, actions), axis = -1)
+			labels = delta_state 
+			print('Num total data', len(inputs))
 
 		self.model.train(inputs, labels)
 		
@@ -117,18 +144,6 @@ class Algorithm:
 		#self.logger.plot(num = 'exp_id ' + string )
 		self.logger.plot('just bc')
 
-class Normalizer:
-
-	def __init__(self, states, next_states):
-
-		shift = -np.mean(states, 0)
-		scale = 1.0 / (np.std(states, 0) + 1e-3)
-
-		self.shift = shift
-		self.scale = scale 
-
-	def normalize(self, observation):
-		return (observation+ self.shift) * self.scale 
 
 def experiment(args):
 	"""
@@ -160,23 +175,61 @@ def experiment(args):
 		for key, param in zip(param_keys, params):
 			setattr(args,key, param)
 
-# obs,acts,n_obs, n_acts = get_expert()
-try:
-	import pybulletgym
+def get_model_and_data(env_name = 'Hopper-v2'):
+	obs,acts,n_obs, n_acts = get_expert(env_name = env_name)
+	buffer = get_data(env_name = env_name)
+	states, actions, _,next_states,_ = buffer.sample(len(buffer))
+	states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
+	next_states = np.concatenate([next_states, n_obs], 0)
 
-	env = gym.make('HopperMuJoCoEnv-v0')
-except:
-	env = gym.make('Hopper-v2')
+	algo.model.load(states, actions,next_states,  [2, 1, 4, 6, 0])
+
+	return algo.model, states[:-990],states[-990:], actions[:-990], actions[-990:]
+
+
+env = gym.make('Hopper-v2')
 
 logger = Logger()
 args = Args()
 algo = Algorithm(args, logger, env)
-
-try:
-	algo.train(1,1,1)
-except KeyboardInterrupt:
-	logger.plot('4')
+model,states, e_states, actions, e_actions = get_model_and_data()
 
 
+#two no bcs 
+#sa lipschitz0.05, s lipshitz 0.05, s lipshitz 0.05 + hor5
 
+#to run massive hyperparam parallels :starting states, stateonly, stateaction, MSE, 
+	#hyperparams: parallel, horizon, lipshitz, lr, bc_train_step
+########
+
+# logger = Logger()
+# discrim = SmallD_S(logger, s = 11,lipschitz = 0.05)
+# #discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
+# ppo  = PPO(logger, bc_loss = "logprob", parallel = 2000, horizon = 5, geometric = True)
+
+# try:
+# 	algo2(ppo, discrim, model, env, states, e_states,e_actions, logger, s_a = False, update_bc = False)
+# 	logger.plot('lp_fake_Sonlydis_bc,geoFalse,lips0.05,hor5')
+# except:
+# 	logger.plot('lp_fake_Sonlydis_bc,geoFalse,lips0.05,hor5')
+
+lipschitz_ = [0.03, 0.05, 0.1]
+parallel_ = [2000, 5000, 10000]
+horizon_ = [5,10,15]
+#loss_ = ['MSE', 'logprob']
+params = list(product(lipschitz_, parallel_, horizon_))
+
+for i, param in enumerate(params[20:]):
+	lipschitz, parallel, horizon = param 
+	print(lipschitz, parallel, horizon)
+	logger = Logger()
+	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz)
+	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
+	ppo  = PPO(logger, bc_loss = "logprob", parallel = parallel, horizon = horizon, geometric = True)
+	string = 'lp_fake_Sonlydis_bc, geoTrue, lips{}, parallel{}, horizon{}'.format(lipschitz, parallel, horizon)
+	try:
+		algo2(ppo, discrim, model, env, states, e_states,e_actions, logger, s_a = False, update_bc = True)
+		logger.plot('may10/'+string)
+	except:
+		logger.plot('may10/'+string)
 

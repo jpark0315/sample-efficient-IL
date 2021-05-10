@@ -43,11 +43,13 @@ class Logger:
             self.dict[key] = [value]
 
     def plot(self, num = None):
+        import matplotlib
+        matplotlib.use("Qt5Agg")
         import matplotlib.pyplot as plt 
         if num is None:
             for k,v in self.dict.items():
                 plt.figure()
-                plt.title(k)
+                plt.title(k+"{}".format(np.asarray(v).mean()))
                 plt.plot(v)
                 #plt.show()
                 plt.savefig('figs/'+k)
@@ -56,8 +58,12 @@ class Logger:
             if not os.path.exists('offfigs/'+num+'/'):
                 os.makedirs('offfigs/'+num+'/')        
             for k,v in self.dict.items():
+                print(k,np.asarray(v).mean())
                 plt.figure()
-                plt.title(k)
+                try:
+                    plt.title(k+"{}".format(np.asarray(v).mean()))
+                except:
+                    plt.title(k)
                 plt.plot(v)
                 plt.savefig('offfigs/'+num+'/'+k+'.png')
 
@@ -68,6 +74,27 @@ class Logger:
         else:
             for k, v in self.dict.items():
                 print('Average', k, np.asarray(v).mean())
+
+    def plot_nb(self):
+        import matplotlib
+        matplotlib.use("Qt5Agg")
+        import matplotlib.pyplot as plt 
+        for k,v in self.dict.items():
+            print(k, np.asarray(v).mean())
+            plt.figure()
+            plt.title(k)
+            plt.plot(v)
+            plt.show()
+
+def get_data(env_name ='Hopper-v2'):
+
+    if env_name == 'Hopper-v2':
+        buffer = pickle.load(open('hopper.pkl', 'rb'))
+
+    return buffer 
+
+
+
 
 
 def get_expert(env_name = 'PBHopper', return_next_states = True):
