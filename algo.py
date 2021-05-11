@@ -19,7 +19,11 @@ Things to get right:
 	dataloading(geometric, torch, subsample, random, )
 	initialization
 	ppo details(advantage computation, architecture, etc )
+	model perfect
 
+TODO:
+	train discriminator on also the real states 
+	try increasing model logprobs as well 
 
 Realized:
 	Geometric sampling works a LOT better for BC
@@ -213,28 +217,28 @@ model,states, e_states, actions, e_actions = get_model_and_data()
 # except:
 # 	logger.plot('lp_fake_Sonlydis_bc,geoFalse,lips0.05,hor5')
 
-lipschitz_ = [0.03]
-parallel_ = [2000]
-horizon_ = [10]
-start_state_ = ['bad', 'good', 'random']
-bc_train_step_ = [1, 3, 5]
-d_loss = ['linear', 'kl']
-#loss_ = ['MSE', 'logprob']
-params = list(product(lipschitz_, parallel_, horizon_, start_state_, bc_train_step_, d_loss))
+# lipschitz_ = [0.03]
+# parallel_ = [2000]
+# horizon_ = [10]
+# start_state_ = ['bad', 'good', 'random']
+# bc_train_step_ = [1, 3, 5]
+# d_loss = ['linear', 'kl']
+# #loss_ = ['MSE', 'logprob']
+# params = list(product(lipschitz_, parallel_, horizon_, start_state_, bc_train_step_, d_loss))
 
-for i, param in enumerate(params[9:18]):
-	lipschitz, parallel, horizon, start_state, bc_train_step, loss = param
-	print(lipschitz, parallel, horizon, start_state, bc_train_step, loss)
-	logger = Logger()
-	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz, loss = loss)
-	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
-	ppo  = PPO(logger, bc_loss = "logprob", parallel = parallel, horizon = horizon, geometric = True,
-	bc_ppo_train_step = bc_train_step)
-	string = 'lp_fake_Sonlydis_bc, geoTrue, lips{}, parallel{}, horizon{},start{},bcstep{},dloss{}'.format(
-	lipschitz, parallel, horizon, start_state, bc_train_step, loss)
-	try:
-		algo2(ppo, discrim, model, env, states, e_states,e_actions, logger, s_a = False,
-		update_bc = True, start_state = start_state)
-		logger.plot('may10.5/'+string)
-	except:
-		logger.plot('may10.5/'+string)
+# for i, param in enumerate(params[9:18]):
+# 	lipschitz, parallel, horizon, start_state, bc_train_step, loss = param
+# 	print(lipschitz, parallel, horizon, start_state, bc_train_step, loss)
+# 	logger = Logger()
+# 	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz, loss = loss)
+# 	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
+# 	ppo  = PPO(logger, bc_loss = "logprob", parallel = parallel, horizon = horizon, geometric = True,
+# 	bc_ppo_train_step = bc_train_step)
+# 	string = 'lp_fake_Sonlydis_bc, geoTrue, lips{}, parallel{}, horizon{},start{},bcstep{},dloss{}'.format(
+# 	lipschitz, parallel, horizon, start_state, bc_train_step, loss)
+# 	try:
+# 		algo2(ppo, discrim, model, env, states, e_states,e_actions, logger, s_a = False,
+# 		update_bc = True, start_state = start_state)
+# 		logger.plot('may10.5/'+string)
+# 	except:
+# 		logger.plot('may10.5/'+string)

@@ -362,11 +362,18 @@ class Ensemble_Model:
        
         if return_single:
             next_obs = next_obs[0]
-
+        penalty = self.get_penalty(ensemble_model_means)
         info = {'log_prob': log_prob, 'dev': dev,
-        'vars': ensemble_model_vars
+        'vars': ensemble_model_vars, 'penalty':penalty 
         }
         return next_obs, info
+
+    def get_penalty(self, ensemble_model_means):
+        mean = ensemble_model_means.mean(0)
+        diffs = ensemble_model_means - mean 
+        dists = np.linalg.norm(diffs, axis = 2)
+        penalty = np.max(dists, axis=0)
+        return penalty 
 
     def validate(self,state, action, next_state,verbose = True, inputs = None, labels = None):
         """

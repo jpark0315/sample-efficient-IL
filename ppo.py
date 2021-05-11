@@ -521,20 +521,27 @@ def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False
 
 
 
-def algo2(agent, discrim,model, env, states, e_states, e_actions, logger,
+def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger,
     update_bc = True,
     s_a = False,
-    start_state = 'bad'):
+    start_state = 'bad',
+    include_buffer = True,
+    include_model_loss = True,
+    penalty_lamda = 1):
 
     for i in range(2000):
         rollout_single_ppo(agent, model, discrim, e_states,states, logger,env,
-        s_a = s_a, start_state = start_state)
-
+        s_a = s_a, start_state = start_state,include_model_loss = include_model_loss, penalty_lamda = penalty_lamda)
+        agent_state, agent_action = (torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])),
+                         torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])))
+        if include_buffer:
+            agent_state = torch.cat([agent_state, torch.FloatTensor(states)[np.random.permutation(states.shape[0])[:agent_state.shape[0]]]], 0)
+            agent_action = torch.cat([agent_action, torch.FloatTensor(actions)[np.random.permutation(states.shape[0])[:agent_state.shape[0]]]], 0)
         if s_a:
-            discrim.train_discrim(e_states,e_actions, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy(),
-                             torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])).numpy())
+
+            discrim.train_discrim(e_states,e_actions,agent_state, agent_action )
         else:
-            discrim.train_discrim(e_states, torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])).numpy())
+            discrim.train_discrim(e_states, agent_state)
 
 
         if update_bc:
@@ -549,20 +556,10 @@ def algo2(agent, discrim,model, env, states, e_states, e_actions, logger,
         print()
 
 def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
-                       s_a = True, start_state = 'bad'):
+                       s_a = True, start_state = 'good', include_model_loss = True,penalty_lamda = 1):
     total_rewards = []
     parallel, rollout_length = agent.buffer.states.shape[0], agent.buffer.states.shape[1]
-    #state, rollout_rewards = states[np.random.randint(states.shape[0])], []
-    #state, rollout_rewards = states[np.random.geometric(0.01)], []
-    # if np.random.uniform() < 0.1:
-    #     #state = bad_states[np.random.randint(0, len(bad_states), size =parallel)]
-    #     state = bad_states[np.random.geometric(0.01, size = parallel)]
-    # else:
-    #     #state = states[np.random.randint(0, len(states), size =parallel)]
-    #     try:
-    #         state = states[np.random.geometric(0.01, size = parallel)]
-    #     except:
-    #         state = states[np.random.geometric(0.01, size = parallel)]
+
     if start_state == 'bad':
         state = bad_states[np.random.permutation(bad_states.shape[0])[:parallel]]
     elif start_state == 'good':
@@ -574,10 +571,15 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
 
         agent_action = agent.select_action(state, horizon)
         model_n_obs, info = model.predict_next_states(state, agent_action, deterministic = True)
+        penalty = info['penalty']
         if s_a:
             reward = discrim(state,agent_action).detach()
         else:
             reward = discrim(state).detach()
+        if include_model_loss:
+            reward -= penalty_lamda * penalty.reshape(-1,1)
+            #reward *= -penalty 
+
 
         model_loss = model.validate(state, agent_action,
                                     model_n_obs, verbose = False)
@@ -587,11 +589,12 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
         agent.buffer.rewards[:,horizon] = np.array(reward).reshape(-1)
         agent.buffer.is_terminals[:,horizon] = np.array(terminals).reshape(-1)
 
-
+        logger.log('penalty', penalty.mean())
         logger.log('model logprobs', info['log_prob'].mean())
         logger.log('model loss', np.asarray(model_loss).mean())
         logger.log('model loss std', np.asarray(model_loss).std())
-        logger.log('rollout {} rew'.format(horizon), (reward.mean().item(), state.mean(), state.std() ))
+        logger.log('rollout {} rew,statem,statestd,penalty'.format(horizon), (reward.mean().item(), state.mean(), state.std(), 
+            penalty.mean()))
         logger.log('state mean',state.mean() )
         logger.log('state std',state.std())
         total_rewards.append(np.array(reward).reshape(-1))
