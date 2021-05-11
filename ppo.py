@@ -198,7 +198,8 @@ class PPO:
         bc_batch_size = 256,
         geometric = False,
         bc_loss = "logprob",
-        bc_ppo_train_step = 1
+        bc_ppo_train_step = 1,
+        bc_lamda = 1
         ):
 
         self.logger = logger
@@ -234,6 +235,7 @@ class PPO:
         self.geometric = geometric
         self.bc_loss = bc_loss
         self.bc_ppo_train_step = bc_ppo_train_step
+        self.bc_lamda = bc_lamda
     def set_action_std(self, new_action_std):
 
         if self.has_continuous_action_space:
@@ -364,7 +366,87 @@ class PPO:
         if clear_buffer:
             self.buffer.clear()
 
+    def update_(self, e_states = None, e_actions = None, bc_step = False, clear_buffer = True):
 
+        # Monte Carlo estimate of returns
+        if not self.parallel:
+            rewards = []
+            discounted_reward = 0
+            for reward, is_terminal in zip(reversed(self.buffer.rewards), reversed(self.buffer.is_terminals)):
+                if is_terminal:
+                    discounted_reward = 0
+                discounted_reward = reward + (self.gamma * discounted_reward)
+                rewards.insert(0, discounted_reward)
+
+            old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(device)
+            old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(device)
+            old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(device)
+
+        else:
+            rewards = []
+            discounted_reward = 0
+            buffer_rewards, buffer_is_terminals = self.buffer.rewards.reshape(-1).tolist(),self.buffer.is_terminals.reshape(-1).tolist()
+            #print(buffer_rewards, buffer_is_terminals)
+            for reward, is_terminal in zip(reversed(buffer_rewards), reversed(buffer_is_terminals)):
+                if is_terminal:
+                    discounted_reward = 0
+                discounted_reward = reward + (self.gamma * discounted_reward)
+                rewards.insert(0, discounted_reward)
+            #print(rewards)
+
+            old_states = torch.FloatTensor(self.buffer.states.reshape(-1, self.state_dim))
+            old_actions  = torch.FloatTensor(self.buffer.actions.reshape(-1, self.action_dim))
+            old_logprobs = torch.FloatTensor(self.buffer.logprobs.reshape(-1))
+
+
+        # Normalizing the rewards
+        rewards = torch.tensor(rewards, dtype=torch.float32).to(device)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
+
+        # convert list to tensor
+
+
+        # Optimize policy for K epochs
+        for _ in range(self.K_epochs):
+
+            # Evaluating old actions and values
+            logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions)
+            # match state_values tensor dimensions with rewards tensor
+            state_values = torch.squeeze(state_values)
+
+            # Finding the ratio (pi_theta / pi_theta__old)
+            ratios = torch.exp(logprobs - old_logprobs.detach())
+
+            # Finding Surrogate Loss
+            advantages = rewards - state_values.detach()
+
+            surr1 = ratios * advantages
+            surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantages
+
+            # final loss of clipped objective PPO
+            mseloss = 0.5*self.MseLoss(state_values, rewards)
+            bc_loss = self.get_bc_loss(e_states,e_actions)
+            loss = -torch.min(surr1, surr2) + mseloss - 0.01*dist_entropy + self.bc_lamda * bc_loss
+            # take gradient step
+            self.optimizer.zero_grad()
+            loss.mean().backward()
+            self.optimizer.step()
+
+            self.logger.log('bc_loss', bc_loss.detach().item())
+            self.logger.log('ppo grad', self.grad_norm(self.policy))
+            self.logger.log('advantages', advantages.mean().detach().item())
+            self.logger.log('advantages max', advantages.max().detach().item())
+            self.logger.log('mseloss', mseloss.mean().detach().item())
+            self.logger.log('training logprobs', logprobs.mean().detach().item())
+            self.logger.log('state_values', state_values.mean().detach().item())
+            self.logger.log('policy ratio', ratios.mean().detach().item())
+
+        # Copy new weights into old policy
+        self.policy_old.load_state_dict(self.policy.state_dict())
+
+        # clear buffer
+        if clear_buffer:
+            self.buffer.clear()
     def bc_step(self, state_batch,action_batch):
         state_batch, action_batch = torch.FloatTensor(state_batch), torch.FloatTensor(action_batch)
         pred = self.policy(state_batch)
@@ -385,7 +467,21 @@ class PPO:
                 total_norm += param_norm.item() ** 2
             total_norm = total_norm ** (1. / 2)
         return total_norm
+    def get_bc_loss(self, state, action):
+        state, action = torch.FloatTensor(state), torch.FloatTensor(action)
+        batch_size = state.shape[0]
+        if self.geometric:
+            idxs = geometric_index(state.shape[0],batch_size)
+        else:
+            idxs = np.random.permutation(state.shape[0])[:batch_size]
+        state_,action_ = state[idxs], action[idxs]
 
+        if self.bc_loss == "MSE":
+            mode, samples, log_probs  = self.policy(state_)
+            loss = nn.MSELoss()(samples, action_)
+        elif self.bc_loss == "logprob":
+            loss = -self.policy.get_log_prob(state_, action_).mean()
+        return loss
     def train_bc(self,state,action, train_step = 1500,
      eva = False, geometric = None, progress = False ):
 
@@ -545,7 +641,8 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
 
 
         if update_bc:
-            agent.update(e_states, e_actions)
+            #agent.update(e_states, e_actions)
+            agent.update_(e_states, e_actions)
         else:
             agent.update()
 
@@ -578,7 +675,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
             reward = discrim(state).detach()
         if include_model_loss:
             reward -= penalty_lamda * penalty.reshape(-1,1)
-            #reward *= -penalty 
+            #reward *= -penalty
 
 
         model_loss = model.validate(state, agent_action,
@@ -593,7 +690,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
         logger.log('model logprobs', info['log_prob'].mean())
         logger.log('model loss', np.asarray(model_loss).mean())
         logger.log('model loss std', np.asarray(model_loss).std())
-        logger.log('rollout {} rew,statem,statestd,penalty'.format(horizon), (reward.mean().item(), state.mean(), state.std(), 
+        logger.log('rollout {} rew,statem,statestd,penalty'.format(horizon), (reward.mean().item(), state.mean(), state.std(),
             penalty.mean()))
         logger.log('state mean',state.mean() )
         logger.log('state std',state.std())
