@@ -232,10 +232,10 @@ horizon_ = [10]
 start_state_ = ['bad']
 #bc_train_step_ = [1, 3, 5]
 
-d_loss = ['linear', 'cql']
-grad_pen = [True, False]
-num_steps_ = [5, 10]
-remember_ = [True, False]
+d_loss = ['cql','linear']
+grad_pen = [False,True]
+num_steps_ = [10,5]
+remember_ = [True,False]
 
 orthogonal_reg =[True, False]
 
