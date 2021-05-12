@@ -42,6 +42,12 @@ Realized:
 		-so one might think that I can somehow fix that
 
 	I think generally state only is better? and
+
+	Also, with penlam1 (small penalty) is just enough pessimism, too much is poison
+		and bc lamda2. but for KL, larger lipshitz of 0.05 with pen1 seems to be good,
+		maybe because the discriminator is not as strong for KL unless it goes above 0.05 
+		I think whats happening is 0.05 for KL is right because the ratio between reward vs pessimism
+		is just to overwhelming for small lipshitz 
 """
 
 class Algorithm:
@@ -249,7 +255,7 @@ include_buffer_ = [False]
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_))
 
-for i, param in enumerate(params[5:10]):
+for i, param in enumerate(params[14:]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer) = param
 
