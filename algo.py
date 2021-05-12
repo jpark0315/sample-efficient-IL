@@ -19,7 +19,14 @@ Things to get right:
 	dataloading(geometric, torch, subsample, random, )
 	initialization
 	ppo details(advantage computation, architecture, etc )
+		ppo architecture 
 	model perfect
+	discriminator perfect
+		-model size
+		-train reps per it
+		-random style loss
+		-grad pen 
+		-remember past samples? 
 
 TODO:
 	train discriminator on also the real states
@@ -219,30 +226,42 @@ model,states, e_states, actions, e_actions = get_model_and_data()
 # 	logger.plot('lp_fake_Sonlydis_bc,geoFalse,lips0.05,hor5')
 
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
-lipschitz_ = [0.03, 0.05]
+lipschitz_ = [0.03]
 parallel_ = [5000]
 horizon_ = [10]
 start_state_ = ['bad']
 #bc_train_step_ = [1, 3, 5]
-d_loss = ['linear', 'kl']
 
-bc_lamda_ = [2,3]
-penalty_lamda_ = [0,1]
+d_loss = ['linear', 'cql']
+grad_pen = [True, False]
+num_steps_ = [5, 10]
+remember_ = [True, False]
+
+orthogonal_reg =[True, False]
+
+bc_lamda_ = [2]
+penalty_lamda_ = [1]
 include_buffer_ = [False]
+
 
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
-params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss,
+params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_, 
 		bc_lamda_, penalty_lamda_, include_buffer_))
 
-for i, param in enumerate(params[3:6]):
-	lipschitz, parallel, horizon, start_state, loss, bc_lamda, penalty_lamda, include_buffer = param
+for i, param in enumerate(params[14:16]):
+	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember, 
+		bc_lamda, penalty_lamda, include_buffer) = param
 
 	logger = Logger()
 	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz, loss = loss)
 	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
+	if not remember and num_steps == 10 and not grad_pen and loss == 'linear':
+		orthogonal_reg = True
+	else:
+		orthogonal_reg = False 
 	ppo  = PPO(logger, bc_loss = "logprob", parallel = parallel, horizon = horizon, geometric = True,
-	bc_lamda = bc_lamda)
+	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
 	string = 'lp_fake_Sonlydis_bc, lips{},d_loss{} parallel{}, horizon{},penlam{},incbuf{},bclam{}'.format(
 	lipschitz,loss, parallel, horizon, penalty_lamda, include_buffer, bc_lamda)
 	try:

@@ -4,7 +4,7 @@ from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
 import numpy as np
 from utils import *
-
+from torchutils import * 
 
 ################################## set device ##################################
 
@@ -199,7 +199,8 @@ class PPO:
         geometric = False,
         bc_loss = "logprob",
         bc_ppo_train_step = 1,
-        bc_lamda = 1
+        bc_lamda = 1,
+        orthogonal_reg = True
         ):
 
         self.logger = logger
@@ -236,6 +237,7 @@ class PPO:
         self.bc_loss = bc_loss
         self.bc_ppo_train_step = bc_ppo_train_step
         self.bc_lamda = bc_lamda
+        self.orthogonal_reg = orthogonal_reg
     def set_action_std(self, new_action_std):
 
         if self.has_continuous_action_space:
@@ -426,7 +428,11 @@ class PPO:
             # final loss of clipped objective PPO
             mseloss = 0.5*self.MseLoss(state_values, rewards)
             bc_loss = self.get_bc_loss(e_states,e_actions)
-            loss = -torch.min(surr1, surr2) + mseloss - 0.01*dist_entropy + self.bc_lamda * bc_loss
+
+            loss = -torch.min(surr1, surr2) + mseloss - 0.01*dist_entropy + self.bc_lamda * bc_loss 
+            if self.orthogonal_reg:
+                reg_loss = orthogonal_regularization(self.policy.actor)
+                loss = loss + reg_loss
             # take gradient step
             self.optimizer.zero_grad()
             loss.mean().backward()
@@ -440,6 +446,7 @@ class PPO:
             self.logger.log('training logprobs', logprobs.mean().detach().item())
             self.logger.log('state_values', state_values.mean().detach().item())
             self.logger.log('policy ratio', ratios.mean().detach().item())
+            if self.orthogonal_reg: self.logger.log('orthogonalreg', reg_loss.detach().item()) 
 
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())

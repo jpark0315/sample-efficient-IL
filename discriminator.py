@@ -7,6 +7,7 @@ import torch.nn as nn
 from tqdm import trange
 from loss import critic_loss , policy_loss
 from torchutils import softmax
+from torch import autograd
 
 class SmallD(nn.Module):
     def __init__(self, logger, s = 3, a = 1,lipschitz = 0.1, loss = 'linear'):
@@ -78,8 +79,11 @@ class SmallD(nn.Module):
 
 
 class SmallD_S(nn.Module):
-    def __init__(self, logger, s = 3, lipschitz = 0.1, loss = 'linear'):
+    def __init__(self, logger, s = 3, lipschitz = 0.1, loss = 'linear', grad_pen = False,
+        num_steps = 10, remember = False):
         super().__init__()
+        self.remember = remember 
+        self.num_steps = num_steps 
         self.loss = loss
         self.lipschitz = lipschitz
         self.net = nn.Sequential(nn.Linear(s, 64),
@@ -89,9 +93,12 @@ class SmallD_S(nn.Module):
             nn.Linear(64,1))
         self.optim = torch.optim.Adam(self.parameters(), lr = 3e-4)
         self.logger = logger
-
-        for p in self.parameters():
-            p.data.clamp_(-self.lipschitz, self.lipschitz)
+        self.grad_pen = grad_pen 
+        if not grad_pen:
+            for p in self.parameters():
+                p.data.clamp_(-self.lipschitz, self.lipschitz)
+        from collections import deque
+        self.remember_buffer = deque(maxlen = 20)
     def forward(self,s):
 
         if not isinstance(s,torch.Tensor):
@@ -99,17 +106,37 @@ class SmallD_S(nn.Module):
         #sa = torch.cat([s,a],1)
         return self.net(s)
 
-    def loss_fn(self, lscore, escore, loss = 'linear'):
+    def loss_fn(self, state_batch, e_state_batch, loss = 'linear'):
         loss = self.loss 
         #KL naive
         if loss == 'kl':
+            lscore = self(state_batch)
+            escore = self(e_state_batch)
             diff = (lscore-escore).mean()
             with torch.no_grad():
                 weights = softmax(diff)
             loss = torch.sum(weights* diff)
-
+            self.logger.log('escore', escore.mean().detach().item())
+            self.logger.log('lscore', lscore.mean().detach().item())
         elif loss == 'linear':
+            lscore = self(state_batch)
+            escore = self(e_state_batch)
             loss = (lscore - escore).mean()
+            self.logger.log('escore', escore.mean().detach().item())
+            self.logger.log('lscore', lscore.mean().detach().item())
+        elif loss == 'cql'
+            rand = torch.FloatTensor(state_batch.shape[0], state_batch.shape[1]).uniform_(-2,2)
+            lscore = self(state_batch)
+            rand_score = self(rand)
+            escore = self(e_state_batch)
+            lse = torch.cat([rand_score, lscore],1)
+            loss = torch.logsumexp(lse, 1).mean()
+            loss = loss - escore.mean() 
+
+            with torch.no_grad():
+                self.logger.log('Rand score', rand_score.mean().detach().item())
+                self.logger.log('escore', escore.mean().detach().item())
+                self.logger.log('lscore', lscore.mean().detach().item())
 
         return loss
 
@@ -117,26 +144,34 @@ class SmallD_S(nn.Module):
         state_batch=  torch.FloatTensor(state_batch)
         e_state_batch= torch.FloatTensor(e_state_batch)
 
-        lscore = self(state_batch)
-        escore = self(e_state_batch)
-        loss = self.loss_fn(lscore, escore)
 
+        loss = self.loss_fn(state_batch, e_state_batch)
+        if self.grad_pen:
+            grad_loss = self.compute_grad_pen(e_state_batch, state_batch)
+            loss = loss+ grad_loss
+            with torch.no_grad():
+                self.logger.log('gradpen', grad_loss.detach().item())
         self.optim.zero_grad()
         loss.backward()
         self.optim.step()
 
-        for p in self.parameters():
-            p.data.clamp_(-self.lipschitz, self.lipschitz)
+        if not self.grad_pen:
+            for p in self.parameters():
+                p.data.clamp_(-self.lipschitz, self.lipschitz)
         self.logger.log('discrim loss', loss.item())
-        self.logger.log('escore', escore.mean().detach().item())
-        self.logger.log('lscore', lscore.mean().detach().item())
+
 
         return loss.item()
 
 
-    def train_discrim(self, e_states, l_states, num_steps = 10,  bs = 256):
+    def train_discrim(self, e_states, l_states,  bs = 256):
+        if self.remember:
+            old_l_states = np.stack([s[np.random.permutation(s.shape[0])][:int(l_states.shape[0]/20)] for s in self.remember_buffer])
+            old_l_states = random.choice(self.remember_buffer)
+            self.remember_buffer.append(l_states)
+            l_states = np.concatenate([l_states, old_l_states], 0)
 
-        for _ in range(num_steps):
+        for _ in range(self.num_steps):
             idx = np.random.permutation(l_states.shape[0])[:bs]
             e_idx = np.random.permutation(e_states.shape[0])[:bs]
 
@@ -144,7 +179,31 @@ class SmallD_S(nn.Module):
             e_state_batch = e_states[e_idx]
 
             loss = self.step(l_state_batch, e_state_batch)
+    def compute_grad_pen(self,
+                         expert_state,
+                         policy_state,
+                         lambda_=10):
+        alpha = torch.rand(expert_state.size(0), 1)
+        expert_data = expert_state
+        policy_data = policy_state
 
+        alpha = alpha.expand_as(expert_data).to(expert_data.device)
+
+        mixup_data = alpha * expert_data + (1 - alpha) * policy_data
+        mixup_data.requires_grad = True
+
+        disc = self.net(mixup_data)
+        ones = torch.ones(disc.size()).to(disc.device)
+        grad = autograd.grad(
+            outputs=disc,
+            inputs=mixup_data,
+            grad_outputs=ones,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True)[0]
+
+        grad_pen = lambda_ * (grad.norm(2, dim=1) - 1).pow(2).mean()
+        return grad_pen
 
 class Discrim(nn.Module):
 
