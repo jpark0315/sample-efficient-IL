@@ -43,8 +43,8 @@ class Logger:
             self.dict[key] = [value]
 
     def plot(self, num = None):
-        import matplotlib
-        matplotlib.use("Qt5Agg")
+        #import matplotlib
+        #matplotlib.use("Qt5Agg")
         import matplotlib.pyplot as plt
         if num is None:
             for k,v in self.dict.items():

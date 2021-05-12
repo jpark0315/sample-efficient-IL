@@ -19,14 +19,14 @@ Things to get right:
 	dataloading(geometric, torch, subsample, random, )
 	initialization
 	ppo details(advantage computation, architecture, etc )
-		ppo architecture 
+		ppo architecture
 	model perfect
 	discriminator perfect
 		-model size
 		-train reps per it
 		-random style loss
-		-grad pen 
-		-remember past samples? 
+		-grad pen
+		-remember past samples?
 
 TODO:
 	train discriminator on also the real states
@@ -233,7 +233,7 @@ start_state_ = ['bad']
 #bc_train_step_ = [1, 3, 5]
 
 d_loss = ['cql','linear']
-grad_pen = [False,True]
+grad_pen_ = [False,True]
 num_steps_ = [10,5]
 remember_ = [True,False]
 
@@ -246,11 +246,11 @@ include_buffer_ = [False]
 
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
-params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_, 
+params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_))
 
-for i, param in enumerate(params[14:16]):
-	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember, 
+for i, param in enumerate(params[5:10]):
+	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer) = param
 
 	logger = Logger()
@@ -259,14 +259,17 @@ for i, param in enumerate(params[14:16]):
 	if not remember and num_steps == 10 and not grad_pen and loss == 'linear':
 		orthogonal_reg = True
 	else:
-		orthogonal_reg = False 
+		orthogonal_reg = False
 	ppo  = PPO(logger, bc_loss = "logprob", parallel = parallel, horizon = horizon, geometric = True,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
-	string = 'lp_fake_Sonlydis_bc, lips{},d_loss{} parallel{}, horizon{},penlam{},incbuf{},bclam{}'.format(
-	lipschitz,loss, parallel, horizon, penalty_lamda, include_buffer, bc_lamda)
+	# string = 'lp_fake_Sonlydis_bc, lips{},d_loss{} parallel{}, horizon{},penlam{},incbuf{},bclam{}'.format(
+	# lipschitz,loss, parallel, horizon, penalty_lamda, include_buffer, bc_lamda)
+	string = 'dloss{},grad_pen{},num_steps{},remember{},orthogonalreg{}'.format(
+	loss,grad_pen, num_steps, remember, orthogonal_reg
+	)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, penalty_lamda = penalty_lamda, include_buffer = include_buffer)
-		logger.plot('may12/'+string)
+		logger.plot('may12.5/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may12/'+string)
+		logger.plot('may12.5/'+string)

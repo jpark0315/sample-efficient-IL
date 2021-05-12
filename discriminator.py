@@ -82,8 +82,8 @@ class SmallD_S(nn.Module):
     def __init__(self, logger, s = 3, lipschitz = 0.1, loss = 'linear', grad_pen = False,
         num_steps = 10, remember = False):
         super().__init__()
-        self.remember = remember 
-        self.num_steps = num_steps 
+        self.remember = remember
+        self.num_steps = num_steps
         self.loss = loss
         self.lipschitz = lipschitz
         self.net = nn.Sequential(nn.Linear(s, 64),
@@ -93,7 +93,7 @@ class SmallD_S(nn.Module):
             nn.Linear(64,1))
         self.optim = torch.optim.Adam(self.parameters(), lr = 3e-4)
         self.logger = logger
-        self.grad_pen = grad_pen 
+        self.grad_pen = grad_pen
         if not grad_pen:
             for p in self.parameters():
                 p.data.clamp_(-self.lipschitz, self.lipschitz)
@@ -107,7 +107,7 @@ class SmallD_S(nn.Module):
         return self.net(s)
 
     def loss_fn(self, state_batch, e_state_batch, loss = 'linear'):
-        loss = self.loss 
+        loss = self.loss
         #KL naive
         if loss == 'kl':
             lscore = self(state_batch)
@@ -124,14 +124,14 @@ class SmallD_S(nn.Module):
             loss = (lscore - escore).mean()
             self.logger.log('escore', escore.mean().detach().item())
             self.logger.log('lscore', lscore.mean().detach().item())
-        elif loss == 'cql'
+        elif loss == 'cql':
             rand = torch.FloatTensor(state_batch.shape[0], state_batch.shape[1]).uniform_(-2,2)
             lscore = self(state_batch)
             rand_score = self(rand)
             escore = self(e_state_batch)
             lse = torch.cat([rand_score, lscore],1)
             loss = torch.logsumexp(lse, 1).mean()
-            loss = loss - escore.mean() 
+            loss = loss - escore.mean()
 
             with torch.no_grad():
                 self.logger.log('Rand score', rand_score.mean().detach().item())
