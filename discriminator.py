@@ -165,7 +165,7 @@ class SmallD_S(nn.Module):
 
 
     def train_discrim(self, e_states, l_states,  bs = 256):
-        if self.remember:
+        if self.remember and len(self.remember_buffer) > 0:
             old_l_states = np.stack([s[np.random.permutation(s.shape[0])][:int(l_states.shape[0]/20)] for s in self.remember_buffer])
             old_l_states = random.choice(self.remember_buffer)
             self.remember_buffer.append(l_states)

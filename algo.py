@@ -48,6 +48,7 @@ Realized:
 		maybe because the discriminator is not as strong for KL unless it goes above 0.05 
 		I think whats happening is 0.05 for KL is right because the ratio between reward vs pessimism
 		is just to overwhelming for small lipshitz 
+
 """
 
 class Algorithm:
@@ -232,18 +233,19 @@ model,states, e_states, actions, e_actions = get_model_and_data()
 # 	logger.plot('lp_fake_Sonlydis_bc,geoFalse,lips0.05,hor5')
 
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
+# , gradpen/nograd-en, remember/noremember, numtrain10/5
 lipschitz_ = [0.03]
 parallel_ = [5000]
 horizon_ = [10]
 start_state_ = ['bad']
 #bc_train_step_ = [1, 3, 5]
 
-d_loss = ['cql','linear']
+d_loss = ['linear']
 grad_pen_ = [False,True]
 num_steps_ = [10,5]
 remember_ = [True,False]
 
-orthogonal_reg =[True, False]
+orthogonal_reg =[False]
 
 bc_lamda_ = [2]
 penalty_lamda_ = [1]
@@ -255,12 +257,13 @@ include_buffer_ = [False]
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_))
 
-for i, param in enumerate(params[14:]):
+for i, param in enumerate(params[3:4]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer) = param
 
 	logger = Logger()
-	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz, loss = loss)
+	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
+		remember = remember, num_steps = num_steps)
 	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
 	if not remember and num_steps == 10 and not grad_pen and loss == 'linear':
 		orthogonal_reg = True
@@ -276,6 +279,6 @@ for i, param in enumerate(params[14:]):
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, penalty_lamda = penalty_lamda, include_buffer = include_buffer)
-		logger.plot('may12.5/'+string)
+		logger.plot('may13/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may12.5/'+string)
+		logger.plot('may13/'+string)
