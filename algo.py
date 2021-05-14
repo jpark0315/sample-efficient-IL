@@ -68,8 +68,8 @@ class Algorithm:
 		#self.normalizer = Normalizer(self.obs, self.n_obs)
 		#self.obs, self.n_obs = self.normalizer.normalize(self.obs), self.normalizer.normalize(self.n_obs)
 
-		self.model = Ensemble_Model(state_size = args.state_dim,
-		        action_size = args.act_dim, logger = logger)
+		self.model = Ensemble_Model(state_size = 17,
+		        action_size =6, logger = logger)
 
 	def train_model(self, buffer = None, include_expert = True, env_name = "Hopper-v2"):
 		if buffer is None:
@@ -194,24 +194,31 @@ def experiment(args):
 		for key, param in zip(param_keys, params):
 			setattr(args,key, param)
 
-def get_model_and_data(env_name = 'Hopper-v2'):
+def get_model_and_data(env_name = 'HalfCheetah-v2'):
+	env = gym.make(env_name)
+
 	obs,acts,n_obs, n_acts = get_expert(env_name = env_name)
 	buffer = get_data(env_name = env_name)
 	states, actions, _,next_states,_ = buffer.sample(len(buffer))
 	states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
 	next_states = np.concatenate([next_states, n_obs], 0)
 
-	algo.model.load(states, actions,next_states,  [2, 1, 4, 6, 0])
+	if env_name == 'Hopper-v2':
+		ids =[2, 1, 4, 6, 0]
+	elif env_name == 'HalfCheetah-v2':
+		ids = [6, 2, 0, 4, 3]
+	algo.model.load(states, actions,next_states,  ids)
+	print(algo.model.validate(states[:1000], actions[:1000], next_states[:1000]))
 
-	return algo.model, states[:-990],states[-990:], actions[:-990], actions[-990:]
+	return env,algo.model, states[:-990],states[-990:], actions[:-990], actions[-990:]
 
-
-env = gym.make('Hopper-v2')
 
 logger = Logger()
 args = Args()
-algo = Algorithm(args, logger, env)
-model,states, e_states, actions, e_actions = get_model_and_data()
+algo = Algorithm(args, logger, env = None)
+env, model,states, e_states, actions, e_actions = get_model_and_data()
+
+#algo.train_model()
 
 
 #two no bcs
@@ -234,51 +241,55 @@ model,states, e_states, actions, e_actions = get_model_and_data()
 
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
 # , gradpen/nograd-en, remember/noremember, numtrain10/5
-lipschitz_ = [0.03]
+lipschitz_ = [0.03,0.05]
 parallel_ = [5000]
-horizon_ = [10]
+horizon_ = [10,5]
 start_state_ = ['bad']
 #bc_train_step_ = [1, 3, 5]
 
 d_loss = ['linear']
-grad_pen_ = [False,True]
-num_steps_ = [10,5]
+grad_pen_ = [False]
+num_steps_ = [10]
 remember_ = [True,False]
 
 orthogonal_reg =[False]
 
-bc_lamda_ = [2]
-penalty_lamda_ = [1]
-include_buffer_ = [False]
+bc_lamda_ = [2,3]
+penalty_lamda_ = [0.5,1.5]
+include_buffer_ = [False,True]
 
+bc_loss = ['logprob', 'MSE']
+geometric = [True, False]
 
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_))
 
-for i, param in enumerate(params[3:4]):
+for i, param in enumerate(params[12:15]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer) = param
 
 	logger = Logger()
-	discrim = SmallD_S(logger, s = 11,lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
+	discrim = SmallD_S(logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
 		remember = remember, num_steps = num_steps)
 	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
-	if not remember and num_steps == 10 and not grad_pen and loss == 'linear':
-		orthogonal_reg = True
-	else:
-		orthogonal_reg = False
-	ppo  = PPO(logger, bc_loss = "logprob", parallel = parallel, horizon = horizon, geometric = True,
+	# if not remember and num_steps == 10 and not grad_pen and loss == 'linear':
+	# 	orthogonal_reg = True
+	# else:
+	# 	orthogonal_reg = False
+	orthogonal_reg = False 
+	ppo  = PPO(logger,state_dim =env.observation_space.shape[0], action_dim = env.action_space.shape[0],
+	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = True,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
 	# string = 'lp_fake_Sonlydis_bc, lips{},d_loss{} parallel{}, horizon{},penlam{},incbuf{},bclam{}'.format(
 	# lipschitz,loss, parallel, horizon, penalty_lamda, include_buffer, bc_lamda)
-	string = 'dloss{},grad_pen{},num_steps{},remember{},orthogonalreg{}'.format(
-	loss,grad_pen, num_steps, remember, orthogonal_reg
+	string = 'lipschitz{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}'.format(
+	lipschitz, horizon, remember, bc_lamda, penalty_lamda, include_buffer
 	)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, penalty_lamda = penalty_lamda, include_buffer = include_buffer)
-		logger.plot('may13/'+string)
+		logger.plot('may14/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may13/'+string)
+		logger.plot('may14/'+string)

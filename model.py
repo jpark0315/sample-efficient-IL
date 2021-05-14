@@ -416,7 +416,7 @@ class Ensemble_Model:
     def save(self, ):
         if not os.path.exists('data/models/'):
             os.makedirs('data/models/')        
-        path = "data/models/modelnew_"
+        path = "data/models/modelnew_hc"
         torch.save(self.models.state_dict(), path) 
 
     def load(self, states, actions,next_states, model_inds, paths = None, test = False):
@@ -430,7 +430,7 @@ class Ensemble_Model:
         self.scaler.fit(inputs)
 
         if paths is None:
-            path = "data/models/modelnew_"
+            path = "data/models/modelnew_hc"
         self.models.load_state_dict(torch.load(path))
  
         if test:
