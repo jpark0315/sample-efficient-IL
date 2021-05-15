@@ -20,6 +20,7 @@ Things to get right:
 	initialization
 	ppo details(advantage computation, architecture, etc )
 		ppo architecture
+		do bc architecture separately?
 	model perfect
 	discriminator perfect
 		-model size
@@ -27,6 +28,7 @@ Things to get right:
 		-random style loss
 		-grad pen
 		-remember past samples?
+
 
 TODO:
 	train discriminator on also the real states
@@ -57,7 +59,7 @@ class Algorithm:
 	"""
 	def __init__(self, args, logger, env):
 
-		self.actor = Actor(args, logger)
+		#self.actor = Actor(args, logger)
 		self.critic = Discrim(args, logger)
 		self.args = args
 		self.env = env
@@ -194,14 +196,32 @@ def experiment(args):
 		for key, param in zip(param_keys, params):
 			setattr(args,key, param)
 
+# def get_model_and_data(env_name = 'HalfCheetah-v2'):
+# 	env = gym.make(env_name)
+
+# 	obs,acts,n_obs, n_acts = get_expert(env_name = env_name)
+# 	buffer = get_data(env_name = env_name)
+# 	states, actions, _,next_states,_ = buffer.sample(len(buffer))
+# 	states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
+# 	next_states = np.concatenate([next_states, n_obs], 0)
+
+# 	if env_name == 'Hopper-v2':
+# 		ids =[2, 1, 4, 6, 0]
+# 	elif env_name == 'HalfCheetah-v2':
+# 		ids = [6, 2, 0, 4, 3]
+# 	algo.model.load(states, actions,next_states,  ids)
+# 	print(algo.model.validate(states[:1000], actions[:1000], next_states[:1000]))
+
+# 	return env,algo.model, states[:-990],states[-990:], actions[:-990], actions[-990:]
+
 def get_model_and_data(env_name = 'HalfCheetah-v2'):
 	env = gym.make(env_name)
 
-	obs,acts,n_obs, n_acts = get_expert(env_name = env_name)
+	obs,acts = get_expert(env_name = env_name)
 	buffer = get_data(env_name = env_name)
 	states, actions, _,next_states,_ = buffer.sample(len(buffer))
-	states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
-	next_states = np.concatenate([next_states, n_obs], 0)
+	#states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
+	#next_states = np.concatenate([next_states, n_obs], 0)
 
 	if env_name == 'Hopper-v2':
 		ids =[2, 1, 4, 6, 0]
@@ -210,8 +230,7 @@ def get_model_and_data(env_name = 'HalfCheetah-v2'):
 	algo.model.load(states, actions,next_states,  ids)
 	print(algo.model.validate(states[:1000], actions[:1000], next_states[:1000]))
 
-	return env,algo.model, states[:-990],states[-990:], actions[:-990], actions[-990:]
-
+	return env, algo.model, states, obs, actions, acts
 
 logger = Logger()
 args = Args()
@@ -241,55 +260,48 @@ env, model,states, e_states, actions, e_actions = get_model_and_data()
 
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
 # , gradpen/nograd-en, remember/noremember, numtrain10/5
-lipschitz_ = [0.03,0.05]
+lipschitz_ = [0.05]
+units_ = [64, 128]
 parallel_ = [5000]
-horizon_ = [10,5]
+horizon_ = [10]
 start_state_ = ['bad']
-#bc_train_step_ = [1, 3, 5]
 
-d_loss = ['linear']
+d_loss = ['cql','linear', 'kl']
 grad_pen_ = [False]
 num_steps_ = [10]
 remember_ = [True,False]
 
 orthogonal_reg =[False]
 
-bc_lamda_ = [2,3]
-penalty_lamda_ = [0.5,1.5]
+bc_lamda_ = [2]
+penalty_lamda_ = [0.1]
 include_buffer_ = [False,True]
 
-bc_loss = ['logprob', 'MSE']
-geometric = [True, False]
 
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
-		bc_lamda_, penalty_lamda_, include_buffer_))
+		bc_lamda_, penalty_lamda_, include_buffer_, units_))
 
-for i, param in enumerate(params[12:15]):
+for i, param in enumerate(params[10:12]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
-		bc_lamda, penalty_lamda, include_buffer) = param
+		bc_lamda, penalty_lamda, include_buffer, units) = param
 
 	logger = Logger()
-	discrim = SmallD_S(logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
-		remember = remember, num_steps = num_steps)
-	#discrim = SmallD(logger, s = 11, a = 3, lipschitz = 0.05)
-	# if not remember and num_steps == 10 and not grad_pen and loss == 'linear':
-	# 	orthogonal_reg = True
-	# else:
-	# 	orthogonal_reg = False
+	discrim = SmallD_S(env, logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
+		remember = remember, num_steps = num_steps, units = units)
+
 	orthogonal_reg = False 
 	ppo  = PPO(logger,state_dim =env.observation_space.shape[0], action_dim = env.action_space.shape[0],
-	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = True,
+	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
-	# string = 'lp_fake_Sonlydis_bc, lips{},d_loss{} parallel{}, horizon{},penlam{},incbuf{},bclam{}'.format(
-	# lipschitz,loss, parallel, horizon, penalty_lamda, include_buffer, bc_lamda)
-	string = 'lipschitz{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}'.format(
-	lipschitz, horizon, remember, bc_lamda, penalty_lamda, include_buffer
+
+	string = 'loss{}lipschitz{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}units{}'.format(
+	loss,lipschitz, horizon, remember, bc_lamda, penalty_lamda, include_buffer, units
 	)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, penalty_lamda = penalty_lamda, include_buffer = include_buffer)
-		logger.plot('may14/'+string)
+		logger.plot('may15/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may14/'+string)
+		logger.plot('may15/'+string)

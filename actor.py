@@ -16,10 +16,10 @@ LOG_STD_MAX = 2
 EPS = np.finfo(np.float32).eps
 class Actor(nn.Module):
 
-	def __init__(self, args, logger):
+	def __init__(self, args, logger, state_dim, hidden_dim, action_dim):
 		super().__init__()
 		#state_dim, hidden_dim, action_dim = args.state_dim, args.policy_hidden_dim, args.act_dim
-		state_dim, hidden_dim , action_dim = 11,256,3
+		#state_dim, hidden_dim , action_dim = 17,256,6
 		self.trunk = nn.Sequential(
 			nn.Linear(state_dim, hidden_dim),
 			nn.ReLU(),
@@ -138,14 +138,14 @@ class Actor(nn.Module):
 
 		_, pred_actions, pred_logprobs = self(expert_states)
 		#_, pred_next_actions, pred_next_logprobs = self(expert_next_states)
-
 		loss = self.bc_loss(pred_actions, expert_actions, expert_states)
-
+		reg = orthogonal_regularization(self)
+		loss = loss + reg 
 		self.optim.zero_grad()
 		loss.backward()
 		self.optim.step() 
 		self.logger.log('BC loss', loss.item())
-		print(loss.item())
+		#print(loss.item())
 
 
 	def bc_loss(self, pred, label, states ):
@@ -163,10 +163,11 @@ class Actor(nn.Module):
 		# elif self.args.bc_loss_fn == 'MLE':
 		# 	log_prob = self.get_log_prob(states,label)
 		# 	loss = -log_prob.mean()
-		# log_prob = self.get_log_prob(states,label)
-		# loss = -log_prob.mean()
+		log_prob = self.get_log_prob(states,label)
+		loss = -log_prob.mean()
 		#loss = 0.5*(self.MSE(pred, label) + self.L1(pred, label))
-		loss = self.MSE(pred, label)
+		#loss = self.MSE(pred, label)
+
 		return loss 
 
 	def train_bc(self, expert_states, expert_actions, num_steps = 10000, batch_size = 256):

@@ -8,6 +8,7 @@ from tqdm import trange
 from loss import critic_loss , policy_loss
 from torchutils import softmax
 from torch import autograd
+import gym 
 
 class SmallD(nn.Module):
     def __init__(self, logger, s = 3, a = 1,lipschitz = 0.1, loss = 'linear'):
@@ -79,18 +80,19 @@ class SmallD(nn.Module):
 
 
 class SmallD_S(nn.Module):
-    def __init__(self, logger, s = 3, lipschitz = 0.1, loss = 'linear', grad_pen = False,
-        num_steps = 10, remember = False):
+    def __init__(self,env, logger, s = 3, lipschitz = 0.1, loss = 'linear', grad_pen = False,
+        num_steps = 10, remember = False, units = 64):
         super().__init__()
+        self.env = env 
         self.remember = remember
         self.num_steps = num_steps
         self.loss = loss
         self.lipschitz = lipschitz
-        self.net = nn.Sequential(nn.Linear(s, 64),
+        self.net = nn.Sequential(nn.Linear(s, units),
             nn.ReLU(),
-            nn.Linear(64,64),
+            nn.Linear(units,units),
             nn.ReLU(),
-            nn.Linear(64,1))
+            nn.Linear(units,1))
         self.optim = torch.optim.Adam(self.parameters(), lr = 3e-4)
         self.logger = logger
         self.grad_pen = grad_pen
@@ -125,7 +127,8 @@ class SmallD_S(nn.Module):
             self.logger.log('escore', escore.mean().detach().item())
             self.logger.log('lscore', lscore.mean().detach().item())
         elif loss == 'cql':
-            rand = torch.FloatTensor(state_batch.shape[0], state_batch.shape[1]).uniform_(-2,2)
+            #rand = torch.FloatTensor(state_batch.shape[0], state_batch.shape[1]).uniform_(-2,2)
+            rand = torch.FloatTensor(np.stack([self.env.observation_space.sample() for _ in range(len(state_batch))]))
             lscore = self(state_batch)
             rand_score = self(rand)
             escore = self(e_state_batch)

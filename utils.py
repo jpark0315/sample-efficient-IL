@@ -2,11 +2,10 @@ import pickle
 import numpy as np
 import torch
 
-def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None):
+def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None, render = False):
 
 	total_timesteps = 0
 	total_returns = 0
-
 	for _ in range(num_episodes):
 		if normalizer:
 			state = normalizer.normalize(env.reset())
@@ -16,6 +15,9 @@ def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None):
 		done = False
 		while not done:
 			with torch.no_grad():
+
+				if render:
+					env.render()
 				if stats == 'mode':
 					action, _, _ = actor(np.array([state]))
 				else:
@@ -30,6 +32,8 @@ def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None):
 				state = normalizer.normalize(next_state)
 			else:
 				state = next_state
+		if render:
+			env.close()
 
 	return total_returns / num_episodes, total_timesteps / num_episodes
 class Logger:
@@ -120,12 +124,14 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 			states.append(np.stack(traj[:,0]).astype('float'))
 			actions.append(np.stack(traj[:,1]).astype('float'))
 	elif env_name == 'HalfCheetah-v2':
-		trajs = pickle.load(open('data/hcexpert.pkl', 'rb'))
+		#trajs = pickle.load(open('data/hcexpert.pkl', 'rb'))
+		trajs = pickle.load(open('data/hcexpert2.pkl', 'rb'))
 		states, actions = [],[]
 		for traj in trajs:
 			traj = np.asarray(traj)
 			states.append(np.stack(traj[:,0]).astype('float'))
 			actions.append(np.stack(traj[:,1]).astype('float'))
+		return  np.vstack(states)[-1000:], np.vstack(actions)[-1000:]
 
 	elif env_name == 'Hopper-v2':
 		trajs = pickle.load(open('data/hopper_expert.pkl', 'rb'))
@@ -155,4 +161,6 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 								 np.vstack(next_states_), np.vstack(next_actions_))
 
 
-		return states[:990], actions[:990], next_states[:990], next_actions[:990]
+		#return states[:990], actions[:990], next_states[:990], next_actions[:990]
+		return states[-1000:], actions[:990], next_states[:990], next_actions[:990]
+

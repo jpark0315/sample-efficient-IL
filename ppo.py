@@ -81,13 +81,13 @@ class ActorCritic(nn.Module):
         # actor
         if has_continuous_action_space :
             self.actor = nn.Sequential(
-                            nn.Linear(state_dim, 512),
+                            nn.Linear(state_dim, 256),
                             nn.ReLU(),
-                            nn.Linear(512, 512),
+                            nn.Linear(256, 256),
                             nn.ReLU(),
-                            nn.Linear(512, action_dim),
-                            nn.Tanh()
-                        )
+                            nn.Linear(256, action_dim),
+                            #nn.Tanh()
+                        )#FIX THIS 512 and TANH and LOSS FROM SAMPLES BELOW for hopper
         else:
             self.actor = nn.Sequential(
                             nn.Linear(state_dim, 64),
@@ -197,10 +197,11 @@ class PPO:
         single = False,
         bc_batch_size = 256,
         geometric = False,
-        bc_loss = "logprob",
+        bc_loss = "MSE",
         bc_ppo_train_step = 1,
         bc_lamda = 1,
-        orthogonal_reg = True
+        orthogonal_reg = False,
+        loss_from_dist = False
         ):
 
         self.logger = logger
@@ -238,6 +239,7 @@ class PPO:
         self.bc_ppo_train_step = bc_ppo_train_step
         self.bc_lamda = bc_lamda
         self.orthogonal_reg = orthogonal_reg
+        self.loss_from_dist = loss_from_dist
     def set_action_std(self, new_action_std):
 
         if self.has_continuous_action_space:
@@ -485,7 +487,10 @@ class PPO:
 
         if self.bc_loss == "MSE":
             mode, samples, log_probs  = self.policy(state_)
-            loss = nn.MSELoss()(samples, action_)
+            if self.loss_from_dist:
+                loss = nn.MSELoss()(samples, action_)
+            else:
+                loss = nn.MSELoss()(mode, action_)
         elif self.bc_loss == "logprob":
             loss = -self.policy.get_log_prob(state_, action_).mean()
         return loss
@@ -509,7 +514,8 @@ class PPO:
 
             if self.bc_loss == "MSE":
                 mode, samples, log_probs  = self.policy(state_)
-                loss = nn.MSELoss()(samples, action_)
+                #loss = nn.MSELoss()(samples, action_)
+                loss = nn.MSELoss()(mode, action_)
             elif self.bc_loss == "logprob":
                 loss = -self.policy.get_log_prob(state_, action_).mean()
 
@@ -634,12 +640,14 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
 
     for i in range(2000):
         rollout_single_ppo(agent, model, discrim, e_states,states, logger,env,
-        s_a = s_a, start_state = start_state,include_model_loss = include_model_loss, penalty_lamda = penalty_lamda)
+        s_a = s_a, start_state = start_state,
+        include_model_loss = include_model_loss, 
+        penalty_lamda = penalty_lamda)
         agent_state, agent_action = (torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])),
                          torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])))
         if include_buffer:
-            agent_state = torch.cat([agent_state, torch.FloatTensor(states)[np.random.permutation(states.shape[0])[:agent_state.shape[0]]]], 0)
-            agent_action = torch.cat([agent_action, torch.FloatTensor(actions)[np.random.permutation(states.shape[0])[:agent_state.shape[0]]]], 0)
+            agent_state = torch.cat([agent_state, torch.FloatTensor(states)[np.random.permutation(states.shape[0])[:agent_state.shape[0]//2]]], 0)
+            agent_action = torch.cat([agent_action, torch.FloatTensor(actions)[np.random.permutation(states.shape[0])[:agent_state.shape[0]//2]]], 0)
         if s_a:
 
             discrim.train_discrim(e_states,e_actions,agent_state, agent_action )
