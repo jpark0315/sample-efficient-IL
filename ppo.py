@@ -636,13 +636,15 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
     start_state = 'bad',
     include_buffer = True,
     include_model_loss = True,
-    penalty_lamda = 1):
+    penalty_lamda = 1,
+    deterministic = True ):
 
     for i in range(2000):
         rollout_single_ppo(agent, model, discrim, e_states,states, logger,env,
         s_a = s_a, start_state = start_state,
         include_model_loss = include_model_loss, 
-        penalty_lamda = penalty_lamda)
+        penalty_lamda = penalty_lamda,
+        deterministic = deterministic)
         agent_state, agent_action = (torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])),
                          torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])))
         if include_buffer:
@@ -662,13 +664,14 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
             agent.update()
 
         print(i)
-        rew, _ = evaluate(agent.policy, env)
+        rew, _ = evaluate(agent.policy, env, logger = logger, model = model, discrim = discrim, num_episodes = 5)
         logger.log('real reward', rew)
         agent.logger.say()
         print()
 
 def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
-                       s_a = True, start_state = 'good', include_model_loss = True,penalty_lamda = 1):
+                       s_a = True, start_state = 'good', include_model_loss = True,penalty_lamda = 1, 
+                       deterministic = True):
     total_rewards = []
     parallel, rollout_length = agent.buffer.states.shape[0], agent.buffer.states.shape[1]
 
@@ -682,7 +685,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
     for horizon in range(rollout_length):
 
         agent_action = agent.select_action(state, horizon)
-        model_n_obs, info = model.predict_next_states(state, agent_action, deterministic = True)
+        model_n_obs, info = model.predict_next_states(state, agent_action, deterministic = deterministic)
         penalty = info['penalty']
         if s_a:
             reward = discrim(state,agent_action).detach()
@@ -701,6 +704,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
         agent.buffer.rewards[:,horizon] = np.array(reward).reshape(-1)
         agent.buffer.is_terminals[:,horizon] = np.array(terminals).reshape(-1)
 
+        logger.log('actions', agent_action.mean())
         logger.log('penalty', penalty.mean())
         logger.log('model logprobs', info['log_prob'].mean())
         logger.log('model loss', np.asarray(model_loss).mean())

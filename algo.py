@@ -28,9 +28,10 @@ Things to get right:
 		-random style loss
 		-grad pen
 		-remember past samples?
-
+	normalize state for bc? 
 
 TODO:
+
 	train discriminator on also the real states
 	try increasing model logprobs as well
 
@@ -73,7 +74,7 @@ class Algorithm:
 		self.model = Ensemble_Model(state_size = 17,
 		        action_size =6, logger = logger)
 
-	def train_model(self, buffer = None, include_expert = True, env_name = "Hopper-v2"):
+	def train_model(self, buffer = None, include_expert = True, env_name = "HalfCheetah-v2"):
 		if buffer is None:
 			buffer =  get_data(env_name = env_name)
 
@@ -217,19 +218,20 @@ def experiment(args):
 def get_model_and_data(env_name = 'HalfCheetah-v2'):
 	env = gym.make(env_name)
 
-	obs,acts = get_expert(env_name = env_name)
+	obs,acts, n_obs,_ = get_expert(env_name = env_name)
 	buffer = get_data(env_name = env_name)
 	states, actions, _,next_states,_ = buffer.sample(len(buffer))
-	#states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
-	#next_states = np.concatenate([next_states, n_obs], 0)
+	states, actions = np.concatenate([states, obs], 0), np.concatenate([actions, acts], 0)
+	next_states = np.concatenate([next_states, n_obs], 0)
 
 	if env_name == 'Hopper-v2':
 		ids =[2, 1, 4, 6, 0]
 	elif env_name == 'HalfCheetah-v2':
-		ids = [6, 2, 0, 4, 3]
+		#ids = [6, 2, 0, 4, 3]
+		ids = [2, 6, 4, 1, 5]
 	algo.model.load(states, actions,next_states,  ids)
 	print(algo.model.validate(states[:1000], actions[:1000], next_states[:1000]))
-
+	print(algo.model.validate(obs, acts, n_obs))
 	return env, algo.model, states, obs, actions, acts
 
 logger = Logger()
@@ -260,32 +262,33 @@ env, model,states, e_states, actions, e_actions = get_model_and_data()
 
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
 # , gradpen/nograd-en, remember/noremember, numtrain10/5
+#try with new model, determintic false, 2,5 horizon, penalty 0.1,0.3/0.5, 
 lipschitz_ = [0.05]
-units_ = [64, 128]
+units_ = [128]
 parallel_ = [5000]
-horizon_ = [10]
+horizon_ = [2,5]
 start_state_ = ['bad']
 
-d_loss = ['cql','linear', 'kl']
+d_loss = ['linear']
 grad_pen_ = [False]
 num_steps_ = [10]
-remember_ = [True,False]
-
+remember_ = [False] 
+deterministic_ = [True, False]
 orthogonal_reg =[False]
 
 bc_lamda_ = [2]
-penalty_lamda_ = [0.1]
-include_buffer_ = [False,True]
+penalty_lamda_ = [0.1,0.3,0,5]
+include_buffer_ = [False]
 
 
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
-		bc_lamda_, penalty_lamda_, include_buffer_, units_))
+		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_))
 
-for i, param in enumerate(params[10:12]):
+for i, param in enumerate(params[5:6]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
-		bc_lamda, penalty_lamda, include_buffer, units) = param
+		bc_lamda, penalty_lamda, include_buffer, units, deterministic) = param
 
 	logger = Logger()
 	discrim = SmallD_S(env, logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
@@ -296,12 +299,13 @@ for i, param in enumerate(params[10:12]):
 	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
 
-	string = 'loss{}lipschitz{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}units{}'.format(
-	loss,lipschitz, horizon, remember, bc_lamda, penalty_lamda, include_buffer, units
+	string = 'loss{}lipschitz{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
+	loss,lipschitz, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
-		update_bc = True, start_state = start_state, penalty_lamda = penalty_lamda, include_buffer = include_buffer)
-		logger.plot('may15/'+string)
+		update_bc = True, start_state = start_state, 
+		penalty_lamda = penalty_lamda, include_buffer = include_buffer, deterministic = deterministic)
+		logger.plot('may17/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may15/'+string)
+		logger.plot('may17/'+string)

@@ -2,11 +2,13 @@ import pickle
 import numpy as np
 import torch
 
-def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None, render = False):
+def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None, render = False, logger = None,
+	discrim = None, model = None):
 
 	total_timesteps = 0
 	total_returns = 0
-	for _ in range(num_episodes):
+	actions = []
+	for j in range(num_episodes):
 		if normalizer:
 			state = normalizer.normalize(env.reset())
 		else:
@@ -22,18 +24,36 @@ def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None, ren
 					action, _, _ = actor(np.array([state]))
 				else:
 					_, action, _ = actor(np.array([state]))
+
 			action = action[0].numpy()
+
 			next_state, reward, done, _ = env.step(action)
 
 			total_returns += reward
 			total_timesteps += 1
+			if logger and j == 0:
+				with torch.no_grad():
+					discrim_score = discrim(state).detach().item() 
+					model_loss = model.validate(state.reshape(1,-1), action.reshape(1,-1),
+									next_state.reshape(1,-1), verbose = False)
+					model_n_obs, info = model.predict_next_states(state.reshape(1,-1), action.reshape(1,-1), 
+						deterministic = True)
+					penalty = info['penalty']
 
+				logger.log('real model dif', np.linalg.norm(model_n_obs - next_state))
+				logger.log('real penalty', penalty.mean())
+				logger.log('real model loss', np.asarray(model_loss).mean())
+				logger.log('real discrim score', discrim_score)
+				logger.log('real action mean', action.mean())
+				logger.log('real state mean', state.mean())
 			if normalizer:
 				state = normalizer.normalize(next_state)
 			else:
 				state = next_state
+
 		if render:
 			env.close()
+
 
 	return total_returns / num_episodes, total_timesteps / num_episodes
 class Logger:
@@ -131,7 +151,7 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 			traj = np.asarray(traj)
 			states.append(np.stack(traj[:,0]).astype('float'))
 			actions.append(np.stack(traj[:,1]).astype('float'))
-		return  np.vstack(states)[-1000:], np.vstack(actions)[-1000:]
+		#return  np.vstack(states)[-1000:], np.vstack(actions)[-1000:]
 
 	elif env_name == 'Hopper-v2':
 		trajs = pickle.load(open('data/hopper_expert.pkl', 'rb'))
@@ -162,5 +182,5 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 
 
 		#return states[:990], actions[:990], next_states[:990], next_actions[:990]
-		return states[-1000:], actions[:990], next_states[:990], next_actions[:990]
+		return states[-1000:], actions[-1000:], next_states[-1000:], next_actions[-1000:]
 
