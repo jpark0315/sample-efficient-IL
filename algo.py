@@ -263,21 +263,22 @@ env, model,states, e_states, actions, e_actions = get_model_and_data()
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
 # , gradpen/nograd-en, remember/noremember, numtrain10/5
 #try with new model, determintic false, 2,5 horizon, penalty 0.1,0.3/0.5, 
+
 lipschitz_ = [0.05]
-units_ = [128]
-parallel_ = [5000]
-horizon_ = [2,5]
+units_ = [64]
+parallel_ = [5000,10000]
+horizon_ = [5,10]
 start_state_ = ['bad']
 
-d_loss = ['linear']
+d_loss = ['linear', 'cql']
 grad_pen_ = [False]
 num_steps_ = [10]
 remember_ = [False] 
-deterministic_ = [True, False]
-orthogonal_reg =[False]
+deterministic_ = [False]
+orthogonal_reg =[True]
 
 bc_lamda_ = [2]
-penalty_lamda_ = [0.1,0.3,0,5]
+penalty_lamda_ = [0.2, 0.4]
 include_buffer_ = [False]
 
 
@@ -299,13 +300,13 @@ for i, param in enumerate(params[5:6]):
 	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
 
-	string = 'loss{}lipschitz{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
-	loss,lipschitz, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
+	string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
+	loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, 
 		penalty_lamda = penalty_lamda, include_buffer = include_buffer, deterministic = deterministic)
-		logger.plot('may17/'+string)
+		logger.plot('may17.5/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may17/'+string)
+		logger.plot('may17.5/'+string)
