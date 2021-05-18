@@ -628,7 +628,12 @@ def rollout_real_ppo(agent, discrim, env,logger, batch_size = 50000, s_a = False
     print('mean fake reward', np.asarray(fake_rewards).mean())
 
 
-
+"""
+    try NOT using first rollout states 
+    try regularizing discriminator with bad samples on both sides
+    try regularizing discriminator with random states on both sides 
+    try increaseing score of behavior policy very slightly(small batch or weight) just like CQL
+"""
 
 def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger,
     update_bc = True,
@@ -637,19 +642,41 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
     include_buffer = True,
     include_model_loss = True,
     penalty_lamda = 1,
-    deterministic = True ):
-
+    deterministic = True,
+    not_use_first_state = False,
+    bad_both_sides = False,
+    random_both_sides = False 
+     ):
+    e_states_copy, e_actions_copy = np.copy(e_states), np.copy(e_actions)
     for i in range(2000):
         rollout_single_ppo(agent, model, discrim, e_states,states, logger,env,
         s_a = s_a, start_state = start_state,
         include_model_loss = include_model_loss, 
         penalty_lamda = penalty_lamda,
         deterministic = deterministic)
-        agent_state, agent_action = (torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])),
+
+        ###discriminator training logics
+        #Logic 1
+        if not_use_first_state:
+            agent_state, agent_action = (torch.FloatTensor(agent.buffer.states[:,1:].reshape(-1, e_states.shape[1])),
+                         torch.FloatTensor(agent.buffer.actions[:,1:].reshape(-1, e_actions.shape[1])))
+        else:
+            agent_state, agent_action = (torch.FloatTensor(agent.buffer.states.reshape(-1, e_states.shape[1])),
                          torch.FloatTensor(agent.buffer.actions.reshape(-1, e_actions.shape[1])))
+        #Logic 2
+        if bad_both_sides: #bad both sides when not_use_first_state is False, one side only when True 
+            e_states = np.concatenate([e_states_copy, states[np.random.choice(states.shape[0], 
+                size = int(e_states_copy.shape[0]* 0.1), replace = False)] ], 0)
+            
+        if random_both_sides: #random both sides when loss == cql
+            rand = np.stack([env.observation_space.sample() for _ in range(int(e_states_copy.shape[0]* 0.1))])
+            e_states = np.concatenate([e_states_copy, rand], 0)
+
         if include_buffer:
             agent_state = torch.cat([agent_state, torch.FloatTensor(states)[np.random.permutation(states.shape[0])[:agent_state.shape[0]//2]]], 0)
             agent_action = torch.cat([agent_action, torch.FloatTensor(actions)[np.random.permutation(states.shape[0])[:agent_state.shape[0]//2]]], 0)
+
+
         if s_a:
 
             discrim.train_discrim(e_states,e_actions,agent_state, agent_action )
@@ -659,7 +686,7 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
 
         if update_bc:
             #agent.update(e_states, e_actions)
-            agent.update_(e_states, e_actions)
+            agent.update_(e_states_copy, e_actions_copy)
         else:
             agent.update()
 

@@ -430,7 +430,7 @@ class Ensemble_Model:
         self.scaler.fit(inputs)
 
         if paths is None:
-            path = "data/models/modelnew_hc"
+            path = "data/models/modelnew_hc2"
         self.models.load_state_dict(torch.load(path))
  
         if test:

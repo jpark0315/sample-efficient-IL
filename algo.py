@@ -30,12 +30,29 @@ Things to get right:
 		-remember past samples?
 	normalize state for bc? 
 
+
 TODO:
 
 	train discriminator on also the real states
 	try increasing model logprobs as well
 
 	try different model penalty
+
+	discriminator regularization:
+	try NOT using first rollout states 
+	try regularizing discriminator with bad samples on both sides
+	try regularizing discriminator with random states on both sides 
+	try increaseing score of behavior policy very slightly(small batch or weight) just like CQL
+	try starting from random state
+	try regularizing discriminator with both lipshitz and gradient penalty 
+	try regularizing with ensemble discriminator penalty? 
+		discriminator will be less certain on states that are new? 
+		Maximise certainty of the discriminator means that it is sure the state is good
+	try 32 units with higher lipshitz 
+	try weighting the samples with the penalty term 
+	try a replay buffer for the states 
+	try small behavioral cloning with the behavior policy
+	
 Realized:
 	Geometric sampling works a LOT better for BC
 	State only discriminator works a bit better for BC additional ppo
@@ -266,30 +283,35 @@ env, model,states, e_states, actions, e_actions = get_model_and_data()
 
 lipschitz_ = [0.05]
 units_ = [64]
-parallel_ = [5000,10000]
-horizon_ = [5,10]
+parallel_ = [5000]
+horizon_ = [10]
 start_state_ = ['bad']
 
-d_loss = ['linear', 'cql']
+d_loss = [ 'cql']
 grad_pen_ = [False]
 num_steps_ = [10]
 remember_ = [False] 
 deterministic_ = [False]
-orthogonal_reg =[True]
+orthogonal_reg =[False]
 
 bc_lamda_ = [2]
-penalty_lamda_ = [0.2, 0.4]
+penalty_lamda_ = [0.4]
 include_buffer_ = [False]
 
+not_use_first_state_ = [True,False]
+bad_both_sides_ = [True,False]
+random_both_sides_ = [True,False]
 
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
-		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_))
+		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
+		not_use_first_state_, bad_both_sides_, random_both_sides_))
 
-for i, param in enumerate(params[5:6]):
+for i, param in enumerate(params[3:4]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
-		bc_lamda, penalty_lamda, include_buffer, units, deterministic) = param
+		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
+		not_use_first_state, bad_both_sides, random_both_sides) = param
 
 	logger = Logger()
 	discrim = SmallD_S(env, logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
@@ -300,13 +322,18 @@ for i, param in enumerate(params[5:6]):
 	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
 
-	string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
-	loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
-	)
+	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
+	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
+	# )
+	string = 'notusefirst{},badboth{},randomboth{}'.format(not_use_first_state, bad_both_sides, random_both_sides)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, 
-		penalty_lamda = penalty_lamda, include_buffer = include_buffer, deterministic = deterministic)
-		logger.plot('may17.5/'+string)
+		penalty_lamda = penalty_lamda, include_buffer = include_buffer, deterministic = deterministic,
+		not_use_first_state = not_use_first_state, 
+		bad_both_sides = bad_both_sides, 
+		random_both_sides = random_both_sides)
+		logger.plot('may18/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may17.5/'+string)
+		logger.plot('may18/'+string)
+

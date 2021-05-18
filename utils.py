@@ -69,6 +69,7 @@ class Logger:
 	def plot(self, num = None):
 		import matplotlib
 		matplotlib.use("Qt5Agg")
+		matplotlib.rcParams['agg.path.chunksize'] = 10000
 		import matplotlib.pyplot as plt
 		if num is None:
 			for k,v in self.dict.items():
@@ -90,7 +91,7 @@ class Logger:
 					plt.title(k)
 				plt.plot(v)
 				plt.savefig('offfigs/'+num+'/'+k+'.png')
-
+	
 	def say(self, all = False):
 		if not all:
 			for k, v in self.dict.items():
