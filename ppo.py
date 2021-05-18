@@ -645,7 +645,8 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
     deterministic = True,
     not_use_first_state = False,
     bad_both_sides = False,
-    random_both_sides = False 
+    random_both_sides = False, 
+    control_penalty = None
      ):
     e_states_copy, e_actions_copy = np.copy(e_states), np.copy(e_actions)
     for i in range(2000):
@@ -653,7 +654,8 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
         s_a = s_a, start_state = start_state,
         include_model_loss = include_model_loss, 
         penalty_lamda = penalty_lamda,
-        deterministic = deterministic)
+        deterministic = deterministic,
+        control_penalty = control_penalty)
 
         ###discriminator training logics
         #Logic 1
@@ -667,7 +669,7 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
         if bad_both_sides: #bad both sides when not_use_first_state is False, one side only when True 
             e_states = np.concatenate([e_states_copy, states[np.random.choice(states.shape[0], 
                 size = int(e_states_copy.shape[0]* 0.1), replace = False)] ], 0)
-            
+
         if random_both_sides: #random both sides when loss == cql
             rand = np.stack([env.observation_space.sample() for _ in range(int(e_states_copy.shape[0]* 0.1))])
             e_states = np.concatenate([e_states_copy, rand], 0)
@@ -698,7 +700,7 @@ def algo2(agent, discrim,model, env, states,actions, e_states, e_actions, logger
 
 def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
                        s_a = True, start_state = 'good', include_model_loss = True,penalty_lamda = 1, 
-                       deterministic = True):
+                       deterministic = True, control_penalty = None):
     total_rewards = []
     parallel, rollout_length = agent.buffer.states.shape[0], agent.buffer.states.shape[1]
 
@@ -720,6 +722,8 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
             reward = discrim(state).detach()
         if include_model_loss:
             reward -= penalty_lamda * penalty.reshape(-1,1)
+            #reward -= control_penalty * np.square(agent_action).sum() 
+            reward -= control_penalty * agent_action.mean()
             #reward *= -penalty
 
 

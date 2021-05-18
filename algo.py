@@ -37,6 +37,8 @@ TODO:
 	try increasing model logprobs as well
 
 	try different model penalty
+	try reward for control penalty 
+	lipshitz policy 
 
 	discriminator regularization:
 	try NOT using first rollout states 
@@ -53,6 +55,7 @@ TODO:
 	try a replay buffer for the states 
 	try small behavioral cloning with the behavior policy
 	
+
 Realized:
 	Geometric sampling works a LOT better for BC
 	State only discriminator works a bit better for BC additional ppo
@@ -291,33 +294,33 @@ d_loss = [ 'cql']
 grad_pen_ = [False]
 num_steps_ = [10]
 remember_ = [False] 
-deterministic_ = [False]
-orthogonal_reg =[False]
+deterministic_ = [False, True]
+orthogonal_reg_ =[True, False]
 
 bc_lamda_ = [2]
 penalty_lamda_ = [0.4]
 include_buffer_ = [False]
 
-not_use_first_state_ = [True,False]
-bad_both_sides_ = [True,False]
-random_both_sides_ = [True,False]
-
+not_use_first_state_ = [True]
+bad_both_sides_ = [False]
+random_both_sides_ = [True]
+control_penalty_ = [0.1, 0.3, 0.5]
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
-		not_use_first_state_, bad_both_sides_, random_both_sides_))
+		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_))
 
-for i, param in enumerate(params[3:4]):
+for i, param in enumerate(params[5:6]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
-		not_use_first_state, bad_both_sides, random_both_sides) = param
+		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty) = param
 
 	logger = Logger()
 	discrim = SmallD_S(env, logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
 		remember = remember, num_steps = num_steps, units = units)
 
-	orthogonal_reg = False 
+	
 	ppo  = PPO(logger,state_dim =env.observation_space.shape[0], action_dim = env.action_space.shape[0],
 	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
@@ -325,15 +328,16 @@ for i, param in enumerate(params[3:4]):
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'notusefirst{},badboth{},randomboth{}'.format(not_use_first_state, bad_both_sides, random_both_sides)
+	string = 'det{},orth{},cp{}'.format(deterministic, orthogonal_reg, control_penalty)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, 
 		penalty_lamda = penalty_lamda, include_buffer = include_buffer, deterministic = deterministic,
 		not_use_first_state = not_use_first_state, 
 		bad_both_sides = bad_both_sides, 
-		random_both_sides = random_both_sides)
-		logger.plot('may18/'+string)
+		random_both_sides = random_both_sides,
+		control_penalty = control_penalty)
+		logger.plot('may18.5/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may18/'+string)
+		logger.plot('may18.5/'+string)
 
