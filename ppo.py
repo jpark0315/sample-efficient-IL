@@ -721,8 +721,9 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
     elif start_state == 'good':
         state = states[geometric_index(states.shape[0],parallel )]
     elif start_state == 'random':
-        state = np.asarray([env.reset() for _ in range(parallel)])
-
+        #state = np.asarray([env.reset() for _ in range(parallel)])
+        state = np.stack([env.observation_space.sample() for _ in range(parallel)])
+        
     for horizon in range(rollout_length):
 
         agent_action = agent.select_action(state, horizon)
