@@ -69,7 +69,7 @@ class ParallelRolloutBuffer:
         self.is_terminals = np.zeros((self.parallel, self.horizon))
 
 class ActorCritic(nn.Module):
-    def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init):
+    def __init__(self, state_dim, action_dim, has_continuous_action_space, action_std_init, tanh):
         super(ActorCritic, self).__init__()
 
         self.has_continuous_action_space = has_continuous_action_space
@@ -80,14 +80,23 @@ class ActorCritic(nn.Module):
 
         # actor
         if has_continuous_action_space :
-            self.actor = nn.Sequential(
-                            nn.Linear(state_dim, 256),
-                            nn.ReLU(),
-                            nn.Linear(256, 256),
-                            nn.ReLU(),
-                            nn.Linear(256, action_dim),
-                            nn.Tanh()
+            if tanh:
+                self.actor = nn.Sequential(
+                                nn.Linear(state_dim, 256),
+                                nn.ReLU(),
+                                nn.Linear(256, 256),
+                                nn.ReLU(),
+                                nn.Linear(256, action_dim),
+                                nn.Tanh()
                         )#FIX THIS 512 and TANH and LOSS FROM SAMPLES BELOW for hopper
+            else: 
+                self.actor = nn.Sequential(
+                                nn.Linear(state_dim, 256),
+                                nn.ReLU(),
+                                nn.Linear(256, 256),
+                                nn.ReLU(),
+                                nn.Linear(256, action_dim),
+                                )
         else:
             self.actor = nn.Sequential(
                             nn.Linear(state_dim, 64),
@@ -201,7 +210,8 @@ class PPO:
         bc_ppo_train_step = 1,
         bc_lamda = 1,
         orthogonal_reg = False,
-        loss_from_dist = False
+        loss_from_dist = False,
+        tanh = False 
         ):
 
         self.logger = logger
@@ -219,13 +229,15 @@ class PPO:
         else:
             self.buffer = ParallelRolloutBuffer(action_dim, state_dim, parallel, horizon)
 
-        self.policy = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
+        self.policy = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init,
+            tanh).to(device)
         self.optimizer = torch.optim.Adam([
                         {'params': self.policy.actor.parameters(), 'lr': lr_actor},
                         {'params': self.policy.critic.parameters(), 'lr': lr_critic}
                     ])
 
-        self.policy_old = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init).to(device)
+        self.policy_old = ActorCritic(state_dim, action_dim, has_continuous_action_space, action_std_init,
+            tanh).to(device)
         self.policy_old.load_state_dict(self.policy.state_dict())
 
         self.MseLoss = nn.MSELoss()

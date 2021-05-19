@@ -299,23 +299,24 @@ deterministic_ = [False]
 orthogonal_reg_ =[True]
 
 bc_lamda_ = [2]
-penalty_lamda_ = [0.4, 0.6]
+penalty_lamda_ = [0.4,0.1]
 include_buffer_ = [False]
 
 not_use_first_state_ = [True]
 bad_both_sides_ = [False]
 random_both_sides_ = [True]
-control_penalty_ = [0.1, 0.5]
+control_penalty_ = [0.05]
+tanh_ = [False]
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
-		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_))
+		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_. tanh_))
 
 for i, param in enumerate(params[0:1]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
-		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty) = param
+		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty, tanh) = param
 
 	logger = Logger()
 	discrim = SmallD_S(env, logger, s = env.observation_space.shape[0],lipschitz = lipschitz, loss = loss, grad_pen = grad_pen,
@@ -324,12 +325,12 @@ for i, param in enumerate(params[0:1]):
 	
 	ppo  = PPO(logger,state_dim =env.observation_space.shape[0], action_dim = env.action_space.shape[0],
 	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
-	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg)
+	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg, tanh = tanh )
 
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'tanhandsquare,pen{},cp{}'.format(penalty_lamda, control_penalty)
+	string = 'tanhfalse,pen{},cp{}'.format(penalty_lamda, control_penalty)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, 
