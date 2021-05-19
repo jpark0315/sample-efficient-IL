@@ -722,7 +722,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
             reward = discrim(state).detach()
         if include_model_loss:
             reward -= penalty_lamda * penalty.reshape(-1,1)
-            reward -= control_penalty * np.square(agent_action).sum() 
+            reward -= control_penalty * np.square(agent_action).sum(1).reshape(-1,1) 
             #reward -= control_penalty * agent_action.mean()
             #reward *= -penalty
 
