@@ -86,7 +86,7 @@ class ActorCritic(nn.Module):
                             nn.Linear(256, 256),
                             nn.ReLU(),
                             nn.Linear(256, action_dim),
-                            #nn.Tanh()
+                            nn.Tanh()
                         )#FIX THIS 512 and TANH and LOSS FROM SAMPLES BELOW for hopper
         else:
             self.actor = nn.Sequential(
@@ -722,8 +722,8 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
             reward = discrim(state).detach()
         if include_model_loss:
             reward -= penalty_lamda * penalty.reshape(-1,1)
-            #reward -= control_penalty * np.square(agent_action).sum() 
-            reward -= control_penalty * agent_action.mean()
+            reward -= control_penalty * np.square(agent_action).sum() 
+            #reward -= control_penalty * agent_action.mean()
             #reward *= -penalty
 
 
