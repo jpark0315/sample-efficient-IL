@@ -723,7 +723,12 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
     elif start_state == 'random':
         #state = np.asarray([env.reset() for _ in range(parallel)])
         state = np.stack([env.observation_space.sample() for _ in range(parallel)])
-        
+    elif start_state == 'hybrid1':
+        state = np.stack([env.observation_space.sample() for _ in range(int(parallel * 0.5))])
+        state2 = bad_states[np.random.permutation(bad_states.shape[0])[:int(parallel * 0.5)]]
+        state = np.concatenate([state, state2], 0)
+        assert len(state) == parallel 
+
     for horizon in range(rollout_length):
 
         agent_action = agent.select_action(state, horizon)
@@ -736,8 +741,10 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
         if include_model_loss:
             reward -= penalty_lamda * penalty.reshape(-1,1)
             reward -= control_penalty * np.square(agent_action).sum(1).reshape(-1,1) 
-            #reward -= control_penalty * agent_action.mean()
-            #reward *= -penalty
+            speed = get_speed(state, model_n_obs)
+
+            logger.log('train speed mean', speed.mean())
+            logger.log('train speed max', speed.max())
 
 
         model_loss = model.validate(state, agent_action,
@@ -763,3 +770,10 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
 
     print('Discrim rewards', np.stack(total_rewards).mean(1), np.stack(total_rewards).sum(0).mean())
     logger.log('avg total rewards', np.stack(total_rewards).sum(0).mean())
+
+def get_speed(state, model_n_obs):
+    #xposbefore = state[:,0]
+    #xposafter = model_n_obs[:,0]
+    speed = model_n_obs[:,0] - state[:,0]
+    return speed 
+

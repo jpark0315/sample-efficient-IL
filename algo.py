@@ -73,6 +73,10 @@ Realized:
 		I think whats happening is 0.05 for KL is right because the ratio between reward vs pessimism
 		is just to overwhelming for small lipshitz 
 
+	so it seems like with high penality the agent overfits to the demonstration, and the
+	test penalty is higher, even though the train penalty is lower, but not when you are starting
+	from a random state, you need that penalty there 
+
 """
 
 class Algorithm:
@@ -289,7 +293,7 @@ lipschitz_ = [0.05]
 units_ = [64]
 parallel_ = [5000]
 horizon_ = [10]
-start_state_ = ['bad', 'random']
+start_state_ = ['hybrid1']
 
 d_loss = [ 'cql']
 grad_pen_ = [False]
@@ -298,7 +302,7 @@ remember_ = [False]
 deterministic_ = [False]
 orthogonal_reg_ =[True]
 
-bc_lamda_ = [2]
+bc_lamda_ = [1,2]
 penalty_lamda_ = [0.4,0.1]
 include_buffer_ = [False]
 
@@ -313,7 +317,7 @@ params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, gra
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
 		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_, tanh_))
 
-for i, param in enumerate(params[3:4]):
+for i, param in enumerate(params[4:5]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
 		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty, tanh) = param
@@ -330,7 +334,8 @@ for i, param in enumerate(params[3:4]):
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'tanhfalse,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
+	string = 'tanhfalse,bc{},pen{},cp{}'.format(bc_lamda, penalty_lamda, control_penalty)
+	print(string)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
 		update_bc = True, start_state = start_state, 
@@ -339,7 +344,7 @@ for i, param in enumerate(params[3:4]):
 		bad_both_sides = bad_both_sides, 
 		random_both_sides = random_both_sides,
 		control_penalty = control_penalty)
-		logger.plot('may20/'+string)
+		logger.plot('may20.5/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may20/'+string)
+		logger.plot('may20.5/'+string)
 
