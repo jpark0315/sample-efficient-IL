@@ -119,6 +119,8 @@ def get_data(env_name ='Hopper-v2'):
 		buffer = pickle.load(open('hopper.pkl', 'rb'))
 	elif env_name == 'HalfCheetah-v2':
 		buffer = pickle.load(open('hc.pkl', 'rb'))
+	elif env_name == 'Walker2d-v2':
+		buffer = pickle.load(open('data/wk.pkl', 'rb'))
 	return buffer
 
 
@@ -138,6 +140,13 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 			traj = np.asarray(traj)
 			states.append(np.stack(traj[:,0]))
 			actions.append(np.stack(traj[:,1]).reshape(-1,1))
+	elif env_name == 'Walker2d-v2':
+		trajs = pickle.load(open('data/wkexpert.pkl', 'rb'))
+		states, actions = [],[]
+		for traj in trajs:
+			traj = np.asarray(traj)
+			states.append(np.stack(traj[:,0]).astype('float'))
+			actions.append(np.stack(traj[:,1]).astype('float'))
 
 	elif env_name == 'PBHopper':
 		trajs = pickle.load(open('data/exp_hop.pkl', 'rb'))
@@ -186,4 +195,5 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 
 		#return states[:990], actions[:990], next_states[:990], next_actions[:990]
 		return states[-1000:], actions[-1000:], next_states[-1000:], next_actions[-1000:]
+		#return states[-3000:], actions[-3000:], next_states[-3000:], next_actions[-3000:]
 

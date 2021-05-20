@@ -99,7 +99,7 @@ class Algorithm:
 		self.model = Ensemble_Model(state_size = 17,
 		        action_size =6, logger = logger)
 
-	def train_model(self, buffer = None, include_expert = True, env_name = "HalfCheetah-v2"):
+	def train_model(self, buffer = None, include_expert = True, env_name = "Walker2d-v2"):
 		if buffer is None:
 			buffer =  get_data(env_name = env_name)
 
@@ -254,6 +254,7 @@ def get_model_and_data(env_name = 'HalfCheetah-v2'):
 	elif env_name == 'HalfCheetah-v2':
 		#ids = [6, 2, 0, 4, 3]
 		ids = [2, 6, 4, 1, 5]
+
 	algo.model.load(states, actions,next_states,  ids)
 	print(algo.model.validate(states[:1000], actions[:1000], next_states[:1000]))
 	print(algo.model.validate(obs, acts, n_obs))
@@ -262,7 +263,9 @@ def get_model_and_data(env_name = 'HalfCheetah-v2'):
 logger = Logger()
 args = Args()
 algo = Algorithm(args, logger, env = None)
+# algo.train_model()
 env, model,states, e_states, actions, e_actions = get_model_and_data()
+print(len(e_states))
 
 #algo.train_model()
 
@@ -288,21 +291,22 @@ env, model,states, e_states, actions, e_actions = get_model_and_data()
 #experiment with discrim trainstep, bc lamda , penalty ladma, include_buffer/no include
 # , gradpen/nograd-en, remember/noremember, numtrain10/5
 #try with new model, determintic false, 2,5 horizon, penalty 0.1,0.3/0.5, 
-
+#try with deterministic true, other/more expert data, bclamda 3, hybrids
+#try different penalty, 
 lipschitz_ = [0.05]
 units_ = [64]
 parallel_ = [5000]
 horizon_ = [10]
-start_state_ = ['hybrid1']
+start_state_ = [ 'hybrid3','hybrid1', 'hybrid2']
 
 d_loss = [ 'cql']
 grad_pen_ = [False]
 num_steps_ = [10]
 remember_ = [False] 
-deterministic_ = [False]
+deterministic_ = [True]
 orthogonal_reg_ =[True]
 
-bc_lamda_ = [1,2]
+bc_lamda_ = [3]
 penalty_lamda_ = [0.4,0.1]
 include_buffer_ = [False]
 
@@ -317,7 +321,7 @@ params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, gra
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
 		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_, tanh_))
 
-for i, param in enumerate(params[4:5]):
+for i, param in enumerate(params[5:6]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
 		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty, tanh) = param
@@ -334,7 +338,7 @@ for i, param in enumerate(params[4:5]):
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'tanhfalse,bc{},pen{},cp{}'.format(bc_lamda, penalty_lamda, control_penalty)
+	string = 'dettrue,bc3,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
 	print(string)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
@@ -344,7 +348,7 @@ for i, param in enumerate(params[4:5]):
 		bad_both_sides = bad_both_sides, 
 		random_both_sides = random_both_sides,
 		control_penalty = control_penalty)
-		logger.plot('may20.5/'+string)
+		logger.plot('may21/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may20.5/'+string)
+		logger.plot('may21/'+string)
 

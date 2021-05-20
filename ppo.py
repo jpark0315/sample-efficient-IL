@@ -728,6 +728,17 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
         state2 = bad_states[np.random.permutation(bad_states.shape[0])[:int(parallel * 0.5)]]
         state = np.concatenate([state, state2], 0)
         assert len(state) == parallel 
+    elif start_state == 'hybrid2':
+        state = np.stack([env.observation_space.sample() for _ in range(int(parallel * 0.3))])
+        state2 = bad_states[np.random.permutation(bad_states.shape[0])[:int(parallel * 0.7)]]
+        state = np.concatenate([state, state2], 0)
+        assert len(state) == parallel 
+    elif start_state == 'hybrid3':
+        state = np.stack([env.observation_space.sample() for _ in range(int(parallel))])
+        state2 = bad_states[np.random.permutation(bad_states.shape[0])[:parallel]]
+        state3 = np.stack([states for _ in range(10)]).reshape(-1, state.shape[1])[:parallel]
+        state = np.concatenate([state,state2,state3],0)
+        state = state[np.random.permutation(state.shape[0])[:parallel]]
 
     for horizon in range(rollout_length):
 
