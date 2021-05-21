@@ -40,8 +40,8 @@ def evaluate(actor, env, num_episodes=10, stats = 'mode', normalizer = None, ren
 						deterministic = True)
 					penalty = info['penalty']
 
-				logger.log('eval reward_run', reward_info['reward_run'])
-				logger.log('eval reward_ctrl', reward_info['reward_ctrl'])
+				#logger.log('eval reward_run', reward_info['reward_run'])
+				#logger.log('eval reward_ctrl', reward_info['reward_ctrl'])
 				logger.log('real model dif', np.linalg.norm(model_n_obs - next_state))
 				logger.log('real penalty', penalty.mean())
 				logger.log('real model loss', np.asarray(model_loss).mean())

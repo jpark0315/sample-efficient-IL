@@ -176,9 +176,9 @@ class SmallD_S(nn.Module):
         loss.backward()
         self.optim.step()
 
-        if not self.grad_pen:
-            for p in self.parameters():
-                p.data.clamp_(-self.lipschitz, self.lipschitz)
+        #if not self.grad_pen:
+        for p in self.parameters():
+            p.data.clamp_(-self.lipschitz, self.lipschitz)
         self.logger.log('discrim loss', loss.item())
 
 

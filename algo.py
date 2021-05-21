@@ -242,7 +242,7 @@ def experiment(args):
 
 # 	return env,algo.model, states[:-990],states[-990:], actions[:-990], actions[-990:]
 
-def get_model_and_data(env_name = 'HalfCheetah-v2'):
+def get_model_and_data(env_name = 'Walker2d-v2'):
 	env = gym.make(env_name)
 
 	obs,acts, n_obs,_ = get_expert(env_name = env_name)
@@ -256,6 +256,8 @@ def get_model_and_data(env_name = 'HalfCheetah-v2'):
 	elif env_name == 'HalfCheetah-v2':
 		#ids = [6, 2, 0, 4, 3]
 		ids = [2, 6, 4, 1, 5]
+	elif env_name == 'Walker2d-v2':
+		ids = [2, 4, 1, 0, 6]
 
 	algo.model.load(states, actions,next_states,  ids)
 	print(algo.model.validate(states[:1000], actions[:1000], next_states[:1000]))
@@ -299,23 +301,23 @@ lipschitz_ = [0.05]
 units_ = [64]
 parallel_ = [5000]
 horizon_ = [10]
-start_state_ = [ 'hybrid3']
+start_state_ = [ 'hybrid3', 'bad']
 
-d_loss = [ 'gail']
-grad_pen_ = [False]
+d_loss = [ 'cql', 'gail', 'linear']
+grad_pen_ = [False, True]
 num_steps_ = [10]
 remember_ = [False] 
 deterministic_ = [True]
 orthogonal_reg_ =[True]
 
-bc_lamda_ = [3]
-penalty_lamda_ = [0.01, 0.05]
+bc_lamda_ = [2]
+penalty_lamda_ = [0.1,0.3]
 include_buffer_ = [False]
 
 not_use_first_state_ = [True]
 bad_both_sides_ = [False]
 random_both_sides_ = [True]
-control_penalty_ = [0.05,0.1]
+control_penalty_ = [0]
 tanh_ = [False]
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
@@ -323,7 +325,7 @@ params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, gra
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
 		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_, tanh_))
 
-for i, param in enumerate(params[1:2]):
+for i, param in enumerate(params[10:12]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
 		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty, tanh) = param
@@ -340,7 +342,7 @@ for i, param in enumerate(params[1:2]):
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'logprob,gail,bc3,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
+	string = 'penboth,cql,lips0.5,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
 	print(string)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
