@@ -7,6 +7,8 @@ import torch.nn as nn
 from tqdm import trange
 from loss import critic_loss , policy_loss
 from torchutils import softmax
+import torch.nn.functional as F
+
 from torch import autograd
 import gym 
 
@@ -101,12 +103,15 @@ class SmallD_S(nn.Module):
                 p.data.clamp_(-self.lipschitz, self.lipschitz)
         from collections import deque
         self.remember_buffer = deque(maxlen = 20)
-    def forward(self,s):
+    def forward(self,s, pred_reward = True):
 
         if not isinstance(s,torch.Tensor):
             s= torch.FloatTensor(s)
         #sa = torch.cat([s,a],1)
-        return self.net(s)
+        if not self.loss == 'gail' or pred_reward == False:
+            return self.net(s)
+        elif self.loss == 'gail' and pred_reward == True:
+            return torch.sigmoid(self.net(s))
 
     def loss_fn(self, state_batch, e_state_batch, loss = 'linear'):
         loss = self.loss
@@ -135,11 +140,24 @@ class SmallD_S(nn.Module):
             lse = torch.cat([rand_score, lscore],1)
             loss = torch.logsumexp(lse, 1).mean()
             loss = loss - escore.mean()
-
             with torch.no_grad():
                 self.logger.log('Rand score', rand_score.mean().detach().item())
                 self.logger.log('escore', escore.mean().detach().item())
                 self.logger.log('lscore', lscore.mean().detach().item())
+        elif loss == 'gail':
+            lscore = self(state_batch,pred_reward = False)
+            escore = self(e_state_batch,pred_reward = False)
+            e_loss = F.binary_cross_entropy_with_logits(
+                escore, torch.ones(escore.size())
+                )
+            l_loss = F.binary_cross_entropy_with_logits(
+                lscore, torch.zeros(lscore.size())
+                )
+            loss = e_loss+l_loss 
+            with torch.no_grad():
+                self.logger.log('escore', escore.mean().detach().item())
+                self.logger.log('lscore', lscore.mean().detach().item())
+
 
         return loss
 

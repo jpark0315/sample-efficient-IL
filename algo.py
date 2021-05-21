@@ -55,8 +55,10 @@ TODO:
 	try weighting the samples with the penalty term 
 	try a replay buffer for the states 
 	try small behavioral cloning with the behavior policy
-	
+	try sigmod loss like gail or tanh 
 
+	try like Rmax, cut when penalty big
+	try bounding discirminator 
 Realized:
 	Geometric sampling works a LOT better for BC
 	State only discriminator works a bit better for BC additional ppo
@@ -292,14 +294,14 @@ print(len(e_states))
 # , gradpen/nograd-en, remember/noremember, numtrain10/5
 #try with new model, determintic false, 2,5 horizon, penalty 0.1,0.3/0.5, 
 #try with deterministic true, other/more expert data, bclamda 3, hybrids
-#try different penalty, 
+#try different penalty, (logprob, )
 lipschitz_ = [0.05]
 units_ = [64]
 parallel_ = [5000]
 horizon_ = [10]
-start_state_ = [ 'hybrid3','hybrid1', 'hybrid2']
+start_state_ = [ 'hybrid3']
 
-d_loss = [ 'cql']
+d_loss = [ 'gail']
 grad_pen_ = [False]
 num_steps_ = [10]
 remember_ = [False] 
@@ -307,13 +309,13 @@ deterministic_ = [True]
 orthogonal_reg_ =[True]
 
 bc_lamda_ = [3]
-penalty_lamda_ = [0.4,0.1]
+penalty_lamda_ = [0.01, 0.05]
 include_buffer_ = [False]
 
 not_use_first_state_ = [True]
 bad_both_sides_ = [False]
 random_both_sides_ = [True]
-control_penalty_ = [0.05, 0.1]
+control_penalty_ = [0.05,0.1]
 tanh_ = [False]
 #loss_ = ['MSE', 'logprob']
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
@@ -321,7 +323,7 @@ params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, gra
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
 		not_use_first_state_, bad_both_sides_, random_both_sides_, orthogonal_reg_, control_penalty_, tanh_))
 
-for i, param in enumerate(params[5:6]):
+for i, param in enumerate(params[1:2]):
 	(lipschitz, parallel, horizon, start_state, loss, grad_pen, num_steps, remember,
 		bc_lamda, penalty_lamda, include_buffer, units, deterministic,
 		not_use_first_state, bad_both_sides, random_both_sides, orthogonal_reg, control_penalty, tanh) = param
@@ -338,7 +340,7 @@ for i, param in enumerate(params[5:6]):
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'dettrue,bc3,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
+	string = 'logprob,gail,bc3,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
 	print(string)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,

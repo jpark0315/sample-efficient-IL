@@ -450,6 +450,7 @@ class PPO:
             # take gradient step
             self.optimizer.zero_grad()
             loss.mean().backward()
+            torch.nn.utils.clip_grad_norm_(self.policy.actor.parameters(), 10)
             self.optimizer.step()
 
             self.logger.log('bc_loss', bc_loss.detach().item())
@@ -744,12 +745,14 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
 
         agent_action = agent.select_action(state, horizon)
         model_n_obs, info = model.predict_next_states(state, agent_action, deterministic = deterministic)
-        penalty = info['penalty']
+        #penalty = info['penalty']
+        penalty = -info['log_prob']
         if s_a:
             reward = discrim(state,agent_action).detach()
         else:
             reward = discrim(state).detach()
         if include_model_loss:
+            logger.log('rewbeforepen', reward.mean())
             reward -= penalty_lamda * penalty.reshape(-1,1)
             reward -= control_penalty * np.square(agent_action).sum(1).reshape(-1,1) 
             speed = get_speed(state, model_n_obs)
