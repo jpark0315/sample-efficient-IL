@@ -752,7 +752,7 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
         else:
             reward = discrim(state).detach()
         if include_model_loss:
-            logger.log('rewbeforepen', reward.mean())
+            logger.log('rewbeforepen', reward.mean().item())
             reward -= penalty_lamda * penalty.reshape(-1,1)
             reward -= control_penalty * np.square(agent_action).sum(1).reshape(-1,1) 
             speed = get_speed(state, model_n_obs)
