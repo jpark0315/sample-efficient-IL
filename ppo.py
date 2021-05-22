@@ -745,9 +745,9 @@ def rollout_single_ppo(agent, model, discrim, states, bad_states, logger,env,
 
         agent_action = agent.select_action(state, horizon)
         model_n_obs, info = model.predict_next_states(state, agent_action, deterministic = deterministic)
-        #penalty = info['penalty']
+        penalty = info['penalty']
         #penalty = -info['log_prob']
-        penalty = info['penalty'] - info['log_prob']
+        #penalty = info['penalty'] - info['log_prob']
         if s_a:
             reward = discrim(state,agent_action).detach()
         else:

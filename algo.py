@@ -269,7 +269,7 @@ args = Args()
 algo = Algorithm(args, logger, env = None)
 # algo.train_model()
 env, model,states, e_states, actions, e_actions = get_model_and_data()
-print(len(e_states))
+print(env, len(e_states))
 
 #algo.train_model()
 
@@ -311,15 +311,16 @@ deterministic_ = [True]
 orthogonal_reg_ =[True]
 
 bc_lamda_ = [2]
-penalty_lamda_ = [0.1,0.3]
+penalty_lamda_ = [0.2,0.4]
 include_buffer_ = [False]
 
-not_use_first_state_ = [True]
+not_use_first_state_ = [False]
 bad_both_sides_ = [False]
-random_both_sides_ = [True]
+random_both_sides_ = [False]
 control_penalty_ = [0]
-tanh_ = [False]
+tanh_ = [True]
 #loss_ = ['MSE', 'logprob']
+#geometric_ = [True,False]
 #bclamda 2,3,4 d_loss linear kl, penalty_lamda 0,1, lipshitz 0.05 0.03
 params = list(product(lipschitz_, parallel_, horizon_, start_state_, d_loss, grad_pen_, num_steps_, remember_,
 		bc_lamda_, penalty_lamda_, include_buffer_, units_, deterministic_,
@@ -336,13 +337,15 @@ for i, param in enumerate(params[10:12]):
 
 	
 	ppo  = PPO(logger,state_dim =env.observation_space.shape[0], action_dim = env.action_space.shape[0],
-	 bc_loss = 'MSE' , parallel = parallel, horizon = horizon, geometric = False,
+	 bc_loss = 'logprob' , parallel = parallel, horizon = horizon, geometric = False,
 	bc_lamda = bc_lamda, orthogonal_reg = orthogonal_reg, tanh = tanh )
 
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'penboth,cql,lips0.5,start{},pen{},cp{}'.format(start_state, penalty_lamda, control_penalty)
+	string = 'penboth,cql,lips0.5,start{}d_loss{},pen{},gradpen{}'.format(
+		start_state,loss, penalty_lamda,grad_pen, 
+		)
 	print(string)
 	try:
 		algo2(ppo, discrim, model, env, states, actions, e_states,e_actions, logger, s_a = False,
@@ -352,7 +355,7 @@ for i, param in enumerate(params[10:12]):
 		bad_both_sides = bad_both_sides, 
 		random_both_sides = random_both_sides,
 		control_penalty = control_penalty)
-		logger.plot('may21/'+string)
+		logger.plot('may22/'+string)
 	except KeyboardInterrupt:
 		logger.plot('may21/'+string)
 

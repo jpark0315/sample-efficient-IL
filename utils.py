@@ -194,6 +194,6 @@ def get_expert(env_name = 'PBHopper', return_next_states = True):
 
 
 		#return states[:990], actions[:990], next_states[:990], next_actions[:990]
-		return states[-1000:], actions[-1000:], next_states[-1000:], next_actions[-1000:]
+		#return states[-1000:], actions[-1000:], next_states[-1000:], next_actions[-1000:]
 		#return states[-3000:], actions[-3000:], next_states[-3000:], next_actions[-3000:]
-
+		return states[-10000:], actions[-10000:], next_states[-10000:], next_actions[-10000:]
