@@ -301,17 +301,17 @@ lipschitz_ = [0.05]
 units_ = [64]
 parallel_ = [5000]
 horizon_ = [10]
-start_state_ = [ 'hybrid3', 'bad']
+start_state_ = [ 'bad']
 
-d_loss = [ 'cql', 'gail', 'linear']
+d_loss = [ 'gail']
 grad_pen_ = [False, True]
-num_steps_ = [10]
-remember_ = [False] 
+num_steps_ = [10,5]
+remember_ = [False, True] 
 deterministic_ = [True]
 orthogonal_reg_ =[True]
 
 bc_lamda_ = [2]
-penalty_lamda_ = [0.2,0.4]
+penalty_lamda_ = [0.05,0.1,0.4]
 include_buffer_ = [False]
 
 not_use_first_state_ = [False]
@@ -343,8 +343,8 @@ for i, param in enumerate(params[10:12]):
 	# string = 'loss{}parallel{},horizon{},remember{},bc_lamda{},penalty_lamda{},include_buffer{}det{}'.format(
 	# loss,parallel, horizon, remember, bc_lamda, penalty_lamda, include_buffer, deterministic
 	# )
-	string = 'penboth,cql,lips0.5,start{}d_loss{},pen{},gradpen{}'.format(
-		start_state,loss, penalty_lamda,grad_pen, 
+	string = 'numsteps{},start{}d_loss{},pen{},gradpen{}remember{}'.format(num_steps,
+		start_state,loss, penalty_lamda,grad_pen, remember
 		)
 	print(string)
 	try:
@@ -355,7 +355,7 @@ for i, param in enumerate(params[10:12]):
 		bad_both_sides = bad_both_sides, 
 		random_both_sides = random_both_sides,
 		control_penalty = control_penalty)
-		logger.plot('may22/'+string)
+		logger.plot('may23/'+string)
 	except KeyboardInterrupt:
-		logger.plot('may21/'+string)
+		logger.plot('may23/'+string)
 
